@@ -46,6 +46,11 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
 - **Konteks**: Modul pengadaan harus mematuhi Aturan AI Agent #4 (seluruh perubahan status harus melalui modul workflow) dan mengelola file versi `ORIGINAL` dan `PREPARED` beserta log audit `ActivityLog`.
 - **Keputusan**: Seluruh operasi CRUD dan transisi status (T1 `createDraftPengadaan`, T2 `updateDraftPengadaan`, serta `deleteDraftPengadaan`) diisolasi di `src/lib/workflow/pengadaan-workflow.ts`. Pembuatan draft memanfaatkan atomic nested insert Prisma (otomatis membungkus `Pengadaan`, `DocumentFile`, dan `ActivityLog` dalam satu transaksi native PostgreSQL tanpa session lock), dan penghapusan memanfaatkan native foreign key `onDelete: Cascade`.
 - **Konsekuensi**: Operasi database bersifat atomik, bebas dari masalah connection exhaustion pada PgBouncer/Supabase pooler (port 6543), dan kode server action `src/app/(tbig)/actions.ts` tetap tipis dan bersih dari query status langsung.
-
-
-
+### 2026-09-21 - ESignProvider Interface, MockESignProvider & Asynchronous Workflow Handling (Step 1.7)
+- **Konteks**: Diperlukan interface provider tanda tangan yang seragam (`ESignProvider`) untuk memisahkan domain aplikasi dari implementasi vendor (Aturan AI Agent #4), implementasi `MockESignProvider` untuk simulasi Fase 1, serta penanganan event webhook yang idempoten dan aman.
+- **Keputusan**:
+  1. Dibuat interface `ESignProvider` di `src/lib/esign/types.ts` dan factory `getESignProvider()` di `src/lib/esign/index.ts`.
+  2. `MockESignProvider` menghasilkan tanda tangan & meterai simulasi dengan watermark diagonal menggunakan `pdf-lib` (`src/lib/pdf/stamp-simulation.ts`), menyimpan file hasil ke storage mock, dan menjadwalkan event via `after()` Next.js dengan fallback `setTimeout` untuk kompatibilitas standalone scripts / CLI.
+  3. Pemrosesan event (`handleESignEvent`) memeriksa idempotensi (mengabaikan job `COMPLETED`/`FAILED`), mengunduh dokumen dari provider, menyimpannya ke storage aplikasi, dan memanggil transisi status atomik di `src/lib/workflow/pengadaan-workflow.ts` (T4, T7, T8) guna menjaga kepatuhan Aturan #3.
+  4. Route `api/webhooks/esign` memvalidasi query parameter token `ESIGN_WEBHOOK_TOKEN`, mencatat payload audit di tabel `WebhookEvent`, dan mendelegasikan parsing ke provider.
+- **Konsekuensi**: Kode aplikasi siap diuji end-to-end tanpa dependensi eksternal Mekari, seluruh transisi status terpusat di workflow, dan webhook route aman serta terisolasi.

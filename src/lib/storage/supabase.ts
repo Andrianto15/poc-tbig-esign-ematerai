@@ -59,6 +59,9 @@ export class SupabaseStorage implements Storage {
     const { data, error } = await client.storage.from(this.bucket).download(key);
 
     if (error || !data) {
+      if (error) {
+        console.error(`[SupabaseStorage.get] Error downloading '${key}':`, error);
+      }
       return null;
     }
 

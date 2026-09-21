@@ -120,7 +120,7 @@ export default async function VendorDetailPengadaanPage({
             <StatusBadge status={pengadaan.status} />
           </div>
           <h1 className="text-2xl font-bold text-zinc-900">{pengadaan.namaPengadaan}</h1>
-          <p className="text-xs text-zinc-400 mt-1">ID: {pengadaan.id}</p>
+          <p className="text-xs text-zinc-500 mt-1">ID: {pengadaan.id}</p>
         </div>
 
         {/* Action Buttons */}
@@ -135,7 +135,7 @@ export default async function VendorDetailPengadaanPage({
           {isWaitingSigner && latestJob?.signUrl && (
             <Link
               href={latestJob.signUrl}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center space-x-1.5 cursor-pointer animate-pulse"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center space-x-1.5 cursor-pointer"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -357,7 +357,8 @@ export default async function VendorDetailPengadaanPage({
               </p>
             </div>
           </div>
-          <span className="text-xs font-mono text-purple-600 font-medium bg-purple-100 px-2.5 py-1 rounded-full animate-pulse">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-purple-900 bg-purple-100/80 border border-purple-200 px-2.5 py-1 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-600"></span>
             Auto-refresh aktif
           </span>
         </div>
@@ -466,12 +467,13 @@ export default async function VendorDetailPengadaanPage({
               Riwayat Aktivitas
             </h2>
 
-            <div className="space-y-4">
+            <div className="relative pl-3 space-y-4 before:absolute before:left-1 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-200">
               {pengadaan.logs.map((log) => (
-                <div key={log.id} className="border-l-2 border-emerald-500 pl-3 py-0.5 text-xs">
+                <div key={log.id} className="relative pl-3 text-xs">
+                  <span className="absolute -left-3 top-1.5 w-2 h-2 rounded-full bg-emerald-600 ring-4 ring-white" />
                   <p className="font-semibold text-zinc-800">{log.action}</p>
                   {log.note && <p className="text-zinc-600 mt-0.5">{log.note}</p>}
-                  <p className="text-zinc-400 mt-1">
+                  <p className="text-zinc-500 mt-1">
                     {new Intl.DateTimeFormat("id-ID", {
                       day: "numeric",
                       month: "short",
@@ -501,7 +503,7 @@ export default async function VendorDetailPengadaanPage({
                 </p>
               </div>
               {activeFile && (
-                <span className="text-xs text-zinc-400 font-mono">
+                <span className="text-xs text-zinc-500 font-mono">
                   {(activeFile.sizeBytes / 1024).toFixed(1)} KB
                 </span>
               )}
@@ -515,7 +517,7 @@ export default async function VendorDetailPengadaanPage({
                   title="Preview Dokumen Pengadaan"
                 />
               ) : (
-                <div className="h-full min-h-[650px] flex items-center justify-center text-zinc-400 text-sm">
+                <div className="h-full min-h-[650px] flex items-center justify-center text-zinc-500 text-sm">
                   Dokumen belum tersedia untuk pratinjau vendor
                 </div>
               )}

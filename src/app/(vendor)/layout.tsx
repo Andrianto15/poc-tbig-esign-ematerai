@@ -23,7 +23,7 @@ export default async function VendorLayout({
             <span className="font-semibold text-zinc-900 text-lg">
               Portal Rekanan Vendor
             </span>
-            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-emerald-50 text-emerald-900 border border-emerald-200">
               Vendor
             </span>
           </Link>

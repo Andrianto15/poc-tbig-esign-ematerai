@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { approvePengadaanAction } from "@/app/(vendor)/actions";
 
 interface ApproveDialogProps {
@@ -11,6 +11,17 @@ export function ApproveDialog({ pengadaanId }: ApproveDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isPending) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, isPending]);
 
   const handleApprove = () => {
     setError(null);
@@ -52,8 +63,13 @@ export function ApproveDialog({ pengadaanId }: ApproveDialogProps) {
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-zinc-200 space-y-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="approve-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-zinc-200 space-y-4">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
                 <svg
@@ -72,7 +88,7 @@ export function ApproveDialog({ pengadaanId }: ApproveDialogProps) {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-zinc-900">
+                <h3 id="approve-dialog-title" className="text-lg font-bold text-zinc-900">
                   Konfirmasi Persetujuan
                 </h3>
                 <p className="text-xs text-zinc-500">Persetujuan Dokumen Pengadaan</p>

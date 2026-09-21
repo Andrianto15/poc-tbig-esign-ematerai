@@ -106,21 +106,28 @@ export default async function VendorPengadaanPage() {
                     <td className="px-6 py-4 text-right">
                       <Link
                         href={`/vendor/pengadaan/${item.id}`}
-                        className="inline-flex items-center space-x-1 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                        title="Lihat detail pengadaan"
+                        aria-label="Lihat detail pengadaan"
+                        className="inline-flex items-center justify-center w-8 h-8 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 border border-transparent hover:border-zinc-200 rounded-lg transition-colors cursor-pointer"
                       >
-                        <span>Lihat Detail</span>
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          className="w-3.5 h-3.5"
+                          className="w-4 h-4"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
+                          strokeWidth={2}
+                          aria-hidden="true"
                         >
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 5l7 7-7 7"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                           />
                         </svg>
                       </Link>

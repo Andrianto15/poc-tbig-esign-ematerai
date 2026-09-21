@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { signPengadaanAsTbigAction } from "@/app/(tbig)/actions";
 
 interface SignTbigDialogProps {
@@ -11,6 +11,17 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isPending) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, isPending]);
 
   const handleSign = () => {
     setError(null);
@@ -49,8 +60,13 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-zinc-200 space-y-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sign-tbig-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-zinc-200 space-y-4">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
                 <svg
@@ -69,7 +85,7 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-zinc-900">
+                <h3 id="sign-tbig-dialog-title" className="text-lg font-bold text-zinc-900">
                   Konfirmasi Tanda Tangan TBIG
                 </h3>
                 <p className="text-xs text-zinc-500">Auto Sign Dokumen Pengadaan</p>

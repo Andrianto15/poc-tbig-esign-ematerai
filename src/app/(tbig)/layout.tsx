@@ -19,7 +19,7 @@ export default async function TbigLayout({
             <span className="font-semibold text-zinc-900 text-lg">
               TBIG Pengadaan
             </span>
-            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-blue-50 text-blue-900 border border-blue-200">
               TBIG Internal
             </span>
           </div>

@@ -22,7 +22,7 @@ export default function LoginPage() {
         </div>
 
         {state?.error && (
-          <div className="mb-5 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+          <div className="mb-5 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
             {state.error}
           </div>
         )}
@@ -42,7 +42,7 @@ export default function LoginPage() {
               autoComplete="email"
               required
               placeholder="nama@perusahaan.com"
-              className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 bg-white"
             />
           </div>
 
@@ -60,7 +60,7 @@ export default function LoginPage() {
               autoComplete="current-password"
               required
               placeholder="••••••••"
-              className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 bg-white"
             />
           </div>
 
@@ -73,8 +73,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-zinc-100 text-xs text-zinc-500 space-y-1 bg-zinc-50 -mx-8 -mb-8 p-6 rounded-b-xl">
-          <p className="font-semibold text-zinc-700 mb-1">Akun Demo (Seed):</p>
+        <div className="mt-8 pt-6 border-t border-zinc-200 text-xs text-zinc-600 space-y-1 bg-zinc-50 -mx-8 -mb-8 p-6 rounded-b-xl">
+          <p className="font-semibold text-zinc-800 mb-1">Akun Demo (Seed):</p>
           <p>• <strong>TBIG:</strong> tbig@poc.local / password123</p>
           <p>• <strong>Vendor 1:</strong> vendor1@poc.local / password123</p>
           <p>• <strong>Vendor 2:</strong> vendor2@poc.local / password123</p>

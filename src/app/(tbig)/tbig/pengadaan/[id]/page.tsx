@@ -98,7 +98,7 @@ export default async function DetailPengadaanPage({
             <StatusBadge status={pengadaan.status} />
           </div>
           <h1 className="text-2xl font-bold text-zinc-900">{pengadaan.namaPengadaan}</h1>
-          <p className="text-xs text-zinc-400 mt-1">ID: {pengadaan.id}</p>
+          <p className="text-xs text-zinc-500 mt-1">ID: {pengadaan.id}</p>
         </div>
 
         {/* Action Buttons */}
@@ -207,7 +207,8 @@ export default async function DetailPengadaanPage({
               </p>
             </div>
           </div>
-          <span className="text-xs font-mono text-blue-600 font-medium bg-blue-100 px-2.5 py-1 rounded-full animate-pulse">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-100/80 border border-blue-200 px-2.5 py-1 rounded-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
             Auto-refresh aktif
           </span>
         </div>
@@ -325,12 +326,13 @@ export default async function DetailPengadaanPage({
               Riwayat Aktivitas
             </h2>
 
-            <div className="space-y-4">
+            <div className="relative pl-3 space-y-4 before:absolute before:left-1 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-200">
               {pengadaan.logs.map((log) => (
-                <div key={log.id} className="border-l-2 border-blue-500 pl-3 py-0.5 text-xs">
+                <div key={log.id} className="relative pl-3 text-xs">
+                  <span className="absolute -left-3 top-1.5 w-2 h-2 rounded-full bg-blue-600 ring-4 ring-white" />
                   <p className="font-semibold text-zinc-800">{log.action}</p>
                   {log.note && <p className="text-zinc-600 mt-0.5">{log.note}</p>}
-                  <p className="text-zinc-400 mt-1">
+                  <p className="text-zinc-500 mt-1">
                     {new Intl.DateTimeFormat("id-ID", {
                       day: "numeric",
                       month: "short",
@@ -358,7 +360,7 @@ export default async function DetailPengadaanPage({
                 </p>
               </div>
               {activeFile && (
-                <span className="text-xs text-zinc-400 font-mono">
+                <span className="text-xs text-zinc-500 font-mono">
                   {(activeFile.sizeBytes / 1024).toFixed(1)} KB
                 </span>
               )}
@@ -372,7 +374,7 @@ export default async function DetailPengadaanPage({
                   title="Preview Dokumen Pengadaan"
                 />
               ) : (
-                <div className="h-full flex items-center justify-center text-zinc-400 text-sm">
+                <div className="h-full flex items-center justify-center text-zinc-500 text-sm">
                   Dokumen tidak tersedia
                 </div>
               )}

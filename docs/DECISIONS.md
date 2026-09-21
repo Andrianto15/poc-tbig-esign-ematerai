@@ -99,5 +99,7 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
   7. Dibuat skrip verifikasi otomatis `scripts/verify-all-scenarios.ts` yang berhasil memvalidasi 100% dari 8 skenario uji yang disyaratkan pada PRD Bagian 10.
 - **Konsekuensi**: Fase 1 (Mock) tuntas 100% dengan tingkat kesiapan produksi tinggi, dokumentasi lengkap, dan siap dilanjutkan ke demo pengguna maupun deploy cloud.
 
-
-
+### 2026-09-21 - HMAC Client Mekari eSign Sandbox (Step 2.1)
+- **Konteks**: Integrasi langsung dengan Mekari eSign Sandbox membutuhkan autentikasi HTTP Signature berbasis HMAC-SHA256 yang deterministik, aman, dan tanpa membocorkan kredensial atau payload dokumen.
+- **Keputusan**: Dibuat builder header di `src/lib/esign/mekari/hmac.ts` dan wrapper `mekariRequest` di `src/lib/esign/mekari/client.ts` menggunakan native `node:crypto`, `fetch`, dan `AbortSignal.timeout(30000)`. Pengujian deterministik diuji via `src/lib/esign/mekari/hmac.test.ts` dan probe end-to-end sandbox diuji via `scripts/mekari-ping.ts`.
+- **Konsekuensi**: Modul HMAC siap digunakan oleh provider Fase 2 tanpa tambahan library eksternal, aman dari kebocoran secret/payload base64, dan koneksi ke endpoint sandbox `/profile` terkonfirmasi 200 OK.

@@ -7,6 +7,7 @@ import {
   createDraftPengadaan,
   updateDraftPengadaan,
   deleteDraftPengadaan,
+  submitTbigSign,
 } from "@/lib/workflow/pengadaan-workflow";
 
 const pengadaanSchema = z
@@ -159,4 +160,18 @@ export async function deletePengadaanAction(pengadaanId: string): Promise<void> 
   await requireRole("TBIG");
   await deleteDraftPengadaan(pengadaanId);
   redirect("/tbig/pengadaan");
+}
+
+export async function signPengadaanAsTbigAction(
+  pengadaanId: string
+): Promise<{ error?: string }> {
+  const user = await requireRole("TBIG");
+  try {
+    await submitTbigSign(pengadaanId, user.id);
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Gagal memproses pengajuan tanda tangan TBIG";
+    return { error: message };
+  }
+  redirect(`/tbig/pengadaan/${pengadaanId}`);
 }

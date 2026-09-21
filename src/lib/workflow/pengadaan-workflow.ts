@@ -391,16 +391,27 @@ export async function deleteDraftPengadaan(pengadaanId: string) {
 export async function submitTbigSign(pengadaanId: string, actorId: string) {
   const pengadaan = await prisma.pengadaan.findUnique({
     where: { id: pengadaanId },
-    include: { files: true },
+    include: {
+      files: true,
+      jobs: {
+        where: { type: SignJobType.AUTO_SIGN_TBIG },
+        orderBy: { createdAt: "desc" },
+      },
+    },
   });
 
   if (!pengadaan) {
     throw new Error("Pengadaan tidak ditemukan.");
   }
 
-  if (pengadaan.status !== PengadaanStatus.DRAFT) {
+  const isDraft = pengadaan.status === PengadaanStatus.DRAFT;
+  const isRetry =
+    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG &&
+    pengadaan.jobs[0]?.status === SignJobStatus.FAILED;
+
+  if (!isDraft && !isRetry) {
     throw new Error(
-      `Pengadaan hanya dapat ditandatangani saat status DRAFT (saat ini: ${pengadaan.status}).`
+      `Pengadaan hanya dapat ditandatangani saat status DRAFT atau setelah job gagal (saat ini: ${pengadaan.status}).`
     );
   }
 
@@ -427,31 +438,51 @@ export async function submitTbigSign(pengadaanId: string, actorId: string) {
   const callbackUrl = `${baseUrl}/api/webhooks/esign?token=${token}`;
 
   // 1. Panggil provider autoSign
-  const result = await provider.autoSign({
-    jobId,
-    pdf: prepBytes,
-    filename: `pengadaan-${pengadaan.noSuratPesanan}.pdf`,
-    page: targetPage,
-    box: LAYOUT.tbigSignature,
-    callbackUrl,
-  });
-
-  // 2. Transisi status pengadaan dengan optimistic check
-  const updated = await prisma.pengadaan.updateMany({
-    where: {
-      id: pengadaanId,
-      status: PengadaanStatus.DRAFT,
-    },
-    data: {
-      status: PengadaanStatus.MENUNGGU_TTD_TBIG,
-    },
-  });
-
-  if (updated.count === 0) {
-    throw new Error("Gagal mengajukan tanda tangan: Status pengadaan telah berubah.");
+  let result;
+  try {
+    result = await provider.autoSign({
+      jobId,
+      pdf: prepBytes,
+      filename: `pengadaan-${pengadaan.noSuratPesanan}.pdf`,
+      page: targetPage,
+      box: LAYOUT.tbigSignature,
+      callbackUrl,
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    await prisma.signJob.create({
+      data: {
+        id: jobId,
+        pengadaanId,
+        type: SignJobType.AUTO_SIGN_TBIG,
+        status: SignJobStatus.FAILED,
+        provider: provider.name,
+        inputFileKind: FileKind.PREPARED,
+        outputFileKind: FileKind.SIGNED_TBIG,
+        errorMessage: errorMsg,
+      },
+    });
+    throw err;
   }
 
-  // 3. Simpan SignJob baru
+  // 2. Transisi status pengadaan dengan optimistic check (jika dari DRAFT)
+  if (isDraft) {
+    const updated = await prisma.pengadaan.updateMany({
+      where: {
+        id: pengadaanId,
+        status: PengadaanStatus.DRAFT,
+      },
+      data: {
+        status: PengadaanStatus.MENUNGGU_TTD_TBIG,
+      },
+    });
+
+    if (updated.count === 0) {
+      throw new Error("Gagal mengajukan tanda tangan: Status pengadaan telah berubah.");
+    }
+  }
+
+  // 3. Simpan SignJob baru status PENDING
   const job = await prisma.signJob.create({
     data: {
       id: jobId,
@@ -470,8 +501,10 @@ export async function submitTbigSign(pengadaanId: string, actorId: string) {
     data: {
       pengadaanId,
       actorId,
-      action: "TBIG_SIGN_SUBMITTED",
-      note: "Pengadaan diajukan untuk proses tanda tangan elektronik TBIG.",
+      action: isRetry ? "TBIG_SIGN_RETRY" : "TBIG_SIGN_SUBMITTED",
+      note: isRetry
+        ? "Pengajuan ulang tanda tangan elektronik TBIG setelah kegagalan."
+        : "Pengadaan diajukan untuk proses tanda tangan elektronik TBIG.",
     },
   });
 

@@ -4,8 +4,11 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/user";
 import { deletePengadaanAction } from "@/app/(tbig)/actions";
 import { StatusBadge } from "@/components/StatusBadge";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { formatRupiah, formatDateIndo } from "@/lib/pdf/lembar-pengesahan";
-import { FileKind, PengadaanStatus } from "@/generated/prisma/enums";
+import { FileKind, PengadaanStatus, SignJobStatus } from "@/generated/prisma/enums";
+import { SignTbigDialog } from "./SignTbigDialog";
+import { RetryTbigSignButton } from "./RetryTbigSignButton";
 
 export default async function DetailPengadaanPage({
   params,
@@ -20,6 +23,9 @@ export default async function DetailPengadaanPage({
     include: {
       vendor: true,
       files: true,
+      jobs: {
+        orderBy: { createdAt: "desc" },
+      },
       logs: {
         orderBy: { createdAt: "desc" },
       },
@@ -29,6 +35,13 @@ export default async function DetailPengadaanPage({
   if (!pengadaan) {
     notFound();
   }
+
+  const latestJob = pengadaan.jobs[0];
+  const isJobFailed = latestJob?.status === SignJobStatus.FAILED;
+  const isProcessing =
+    (pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG ||
+      pengadaan.status === PengadaanStatus.MENUNGGU_TTD_VENDOR) &&
+    !isJobFailed;
 
   // Pilih file dokumen dengan prioritas: FINAL > STAMPED_METERAI > SIGNED_TBIG > PREPARED > ORIGINAL
   const filePriority: FileKind[] = [
@@ -48,6 +61,9 @@ export default async function DetailPengadaanPage({
 
   return (
     <div className="space-y-6">
+      {/* Auto refresh saat status sedang diproses */}
+      {isProcessing && <AutoRefresh intervalMs={3000} />}
+
       {/* Header Detail */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
         <div>
@@ -65,6 +81,7 @@ export default async function DetailPengadaanPage({
         <div className="flex items-center space-x-3">
           {pengadaan.status === PengadaanStatus.DRAFT && (
             <>
+              <SignTbigDialog pengadaanId={pengadaan.id} />
               <Link
                 href={`/tbig/pengadaan/${pengadaan.id}/edit`}
                 className="px-4 py-2 border border-zinc-300 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
@@ -81,6 +98,9 @@ export default async function DetailPengadaanPage({
               </form>
             </>
           )}
+          {isJobFailed && (
+            <RetryTbigSignButton pengadaanId={pengadaan.id} />
+          )}
           {activeFile && (
             <a
               href={`/api/files/${activeFile.id}`}
@@ -93,6 +113,81 @@ export default async function DetailPengadaanPage({
           )}
         </div>
       </div>
+
+      {/* Banner Status Sedang Diproses */}
+      {isProcessing && (
+        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 flex items-center justify-between shadow-xs">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+              <svg
+                className="animate-spin h-4 w-4 text-blue-600"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8H4z"
+                />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-blue-900">
+                {pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG
+                  ? "Sedang Memproses Tanda Tangan TBIG"
+                  : "Sedang Dalam Proses Vendor"}
+              </p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Dokumen sedang diproses secara elektronik oleh penyedia tanda tangan. Halaman akan diperbarui otomatis setiap beberapa detik...
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-mono text-blue-600 font-medium bg-blue-100 px-2.5 py-1 rounded-full animate-pulse">
+            Auto-refresh aktif
+          </span>
+        </div>
+      )}
+
+      {/* Banner Error Job Gagal */}
+      {isJobFailed && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+          <div className="flex items-start space-x-3">
+            <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0 mt-0.5">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-red-900">
+                Proses Tanda Tangan Gagal
+              </p>
+              <p className="text-xs text-red-700 mt-0.5">
+                {latestJob?.errorMessage || "Penyedia tanda tangan gagal memproses dokumen."} Silakan coba lagi.
+              </p>
+            </div>
+          </div>
+          <RetryTbigSignButton pengadaanId={pengadaan.id} />
+        </div>
+      )}
 
       {/* Alasan Penolakan jika DITOLAK */}
       {pengadaan.status === PengadaanStatus.DITOLAK && pengadaan.alasanPenolakan && (

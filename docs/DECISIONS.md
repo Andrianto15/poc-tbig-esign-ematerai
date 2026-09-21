@@ -54,3 +54,12 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
   3. Pemrosesan event (`handleESignEvent`) memeriksa idempotensi (mengabaikan job `COMPLETED`/`FAILED`), mengunduh dokumen dari provider, menyimpannya ke storage aplikasi, dan memanggil transisi status atomik di `src/lib/workflow/pengadaan-workflow.ts` (T4, T7, T8) guna menjaga kepatuhan Aturan #3.
   4. Route `api/webhooks/esign` memvalidasi query parameter token `ESIGN_WEBHOOK_TOKEN`, mencatat payload audit di tabel `WebhookEvent`, dan mendelegasikan parsing ke provider.
 - **Konsekuensi**: Kode aplikasi siap diuji end-to-end tanpa dependensi eksternal Mekari, seluruh transisi status terpusat di workflow, dan webhook route aman serta terisolasi.
+
+### 2026-09-21 - Tanda Tangan TBIG, Dialog Konfirmasi, Auto-Refresh & Retry Workflow (Step 1.8)
+- **Konteks**: Diperlukan implementasi UI dan workflow untuk aksi penandatanganan TBIG (T3), dialog konfirmasi, auto-refresh detail halaman saat dokumen dalam proses, serta penanganan kegagalan job provider dengan opsi "Coba lagi" (retry) sesuai PRD Bagian 5.2 dan 8.4.
+- **Keputusan**:
+  1. Aksi penandatanganan TBIG dipicu lewat komponen `SignTbigDialog` yang menampilkan modal konfirmasi sebelum menjalankan Server Action `signPengadaanAsTbigAction`.
+  2. Fungsi workflow `submitTbigSign` diperluas untuk menangani dua kondisi: inisiasi awal dari status `DRAFT` (optimistic update ke `MENUNGGU_TTD_TBIG`), dan inisiasi ulang (retry) saat status `MENUNGGU_TTD_TBIG` dengan job `AUTO_SIGN_TBIG` berstatus `FAILED`, sehingga status pengadaan tetap stabil sesuai PRD 5.2.
+  3. Dibuat komponen `AutoRefresh` berbasis `router.refresh()` dengan interval 3 detik, aktif secara selektif saat status `MENUNGGU_TTD_TBIG` atau `MENUNGGU_TTD_VENDOR` dan tidak ada kegagalan job.
+  4. Pada kondisi kegagalan job (mis. `MOCK_ESIGN_FAIL`), halaman detail menampilkan banner error dan tombol `RetryTbigSignButton` ("Coba lagi").
+- **Konsekuensi**: Alur tanda tangan TBIG berjalan interaktif, status terbarui otomatis tanpa reload manual, dan skenario kegagalan provider tertangani secara elegan.

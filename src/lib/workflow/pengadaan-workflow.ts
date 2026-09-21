@@ -799,3 +799,71 @@ export async function completeVendorSignTransition(
 
   return updatedJob;
 }
+
+export interface RejectPengadaanInput {
+  pengadaanId: string;
+  vendorId: string;
+  actorId: string;
+  alasanPenolakan: string;
+}
+
+/**
+ * Transisi T5: Vendor menolak pengadaan (MENUNGGU_PERSETUJUAN_VENDOR -> DITOLAK)
+ */
+export async function rejectPengadaanByVendor(input: RejectPengadaanInput) {
+  const trimmedReason = input.alasanPenolakan.trim();
+  if (trimmedReason.length < 10) {
+    throw new Error("Alasan penolakan minimal 10 karakter.");
+  }
+
+  const pengadaan = await prisma.pengadaan.findUnique({
+    where: { id: input.pengadaanId },
+  });
+
+  if (!pengadaan) {
+    throw new Error("Pengadaan tidak ditemukan.");
+  }
+
+  if (pengadaan.vendorId !== input.vendorId) {
+    throw new Error("Pengadaan ini bukan milik vendor Anda.");
+  }
+
+  if (pengadaan.status !== PengadaanStatus.MENUNGGU_PERSETUJUAN_VENDOR) {
+    throw new Error(
+      `Pengadaan hanya dapat ditolak saat status MENUNGGU_PERSETUJUAN_VENDOR (saat ini: ${pengadaan.status}).`
+    );
+  }
+
+  // Optimistic update status pengadaan ke DITOLAK
+  const updated = await prisma.pengadaan.updateMany({
+    where: {
+      id: input.pengadaanId,
+      vendorId: input.vendorId,
+      status: PengadaanStatus.MENUNGGU_PERSETUJUAN_VENDOR,
+    },
+    data: {
+      status: PengadaanStatus.DITOLAK,
+      alasanPenolakan: trimmedReason,
+      vendorRespondedAt: new Date(),
+    },
+  });
+
+  if (updated.count === 0) {
+    throw new Error("Gagal menolak pengadaan: Status pengadaan telah berubah.");
+  }
+
+  // Catat ActivityLog
+  await prisma.activityLog.create({
+    data: {
+      pengadaanId: input.pengadaanId,
+      actorId: input.actorId,
+      action: "VENDOR_REJECTED",
+      note: `Pengadaan ditolak oleh vendor. Alasan: "${trimmedReason}"`,
+    },
+  });
+
+  return await prisma.pengadaan.findUnique({
+    where: { id: input.pengadaanId },
+  });
+}
+

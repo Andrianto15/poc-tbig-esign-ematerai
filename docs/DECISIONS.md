@@ -63,3 +63,15 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
   3. Dibuat komponen `AutoRefresh` berbasis `router.refresh()` dengan interval 3 detik, aktif secara selektif saat status `MENUNGGU_TTD_TBIG` atau `MENUNGGU_TTD_VENDOR` dan tidak ada kegagalan job.
   4. Pada kondisi kegagalan job (mis. `MOCK_ESIGN_FAIL`), halaman detail menampilkan banner error dan tombol `RetryTbigSignButton` ("Coba lagi").
 - **Konsekuensi**: Alur tanda tangan TBIG berjalan interaktif, status terbarui otomatis tanpa reload manual, dan skenario kegagalan provider tertangani secara elegan.
+
+### 2026-09-21 - Portal Vendor: Daftar, Detail, Visibilitas & Alur Penolakan T5 (Step 1.9)
+- **Konteks**: Diperlukan portal vendor untuk meninjau pengadaan yang telah ditandatangani TBIG, aturan visibilitas dan proteksi multi-tenant ketat (PRD Bagian 7.4), serta alur penolakan dokumen oleh vendor (Transisi T5) dengan dialog alasan terkonfirmasi minimal 10 karakter.
+- **Keputusan**:
+  1. Halaman daftar vendor (`/vendor/pengadaan`) memfilter data dengan klausul `vendorId: user.vendorId` dan `status: { notIn: [DRAFT, MENUNGGU_TTD_TBIG] }`, memastikan vendor hanya melihat pengadaan miliknya yang sudah mencapai tahap `MENUNGGU_PERSETUJUAN_VENDOR` ke atas.
+  2. Halaman detail vendor (`/vendor/pengadaan/[id]`) menerapkan proteksi 404 jika pengadaan bukan milik vendor yang login atau jika status masih `DRAFT`/`MENUNGGU_TTD_TBIG`.
+  3. Pratinjau PDF di portal vendor memprioritaskan dokumen versi bertanda tangan (`FINAL` > `STAMPED_METERAI` > `SIGNED_TBIG`), sehingga vendor hanya menelaah dokumen yang sah dari TBIG.
+  4. Transisi T5 diisolasi dalam fungsi workflow `rejectPengadaanByVendor` di `src/lib/workflow/pengadaan-workflow.ts`: memvalidasi alasan minimal 10 karakter, mengecek kepemilikan vendor dan status `MENUNGGU_PERSETUJUAN_VENDOR`, melakukan update atomik status `DITOLAK`, mencatat `alasanPenolakan` & timestamp `vendorRespondedAt`, serta merekam audit `ActivityLog`.
+  5. UI penolakan menggunakan komponen client `RejectDialog` dengan indikator counter karakter real-time dan feedback validasi.
+  6. Alasan penolakan ditampilkan transparan pada banner detail pengadaan di kedua sisi (portal Vendor dan portal TBIG).
+- **Konsekuensi**: Proteksi data lintas vendor dan kerahasiaan draft internal TBIG terjamin, alur penolakan patuh terhadap aturan arsitektur workflow, dan komunikasi alasan penolakan terlihat jelas oleh kedua belah pihak.
+

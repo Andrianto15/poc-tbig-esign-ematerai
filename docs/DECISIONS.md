@@ -23,3 +23,9 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
 - **Konteks**: Versi Prisma yang terpasang adalah Prisma v7.x (`7.10.0`), di mana Prisma memisahkan konfigurasi runtime/datasource ke file konfigurasi TypeScript (`prisma7.config.ts`) dengan `defineConfig`.
 - **Keputusan**: Sesuai catatan PRD Bagian 4.1, konfigurasi URL diarahkan ke `process.env["DATABASE_URL"]` pada `prisma7.config.ts`, dan migrasi memanfaatkan `DIRECT_URL` sesuai kebutuhan Prisma CLI.
 - **Konsekuensi**: Menggunakan `dotenv/config` dan `tsx` untuk mendukung eksekusi config TypeScript dan script seed.
+
+### 2026-09-21 - Driver Adapter `@prisma/adapter-pg` untuk Prisma 7 & RLS Shadow DB Handling
+- **Konteks**: Prisma Client di Prisma 7 memerlukan driver adapter SQL (`@prisma/adapter-pg` + `pg`) untuk eksekusi query PostgreSQL, dan migrasi shadow database mengevaluasi skrip RLS dari basis data kosong.
+- **Keputusan**: Menggunakan `@prisma/adapter-pg` dengan connection pool `pg`, menginisialisasi singleton di `src/lib/db.ts`, dan menggunakan `ALTER TABLE IF EXISTS "_prisma_migrations"` pada migrasi `enable_rls` agar kompatibel dengan shadow database Prisma Migrate.
+- **Konsekuensi**: Eksekusi runtime berjalan cepat dan stabil, seluruh tabel Supabase terproteksi RLS, dan migrasi dev berjalan bersih.
+

@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,139 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  TBIG
+  VENDOR
+}
+
+enum PengadaanStatus {
+  DRAFT
+  MENUNGGU_TTD_TBIG
+  MENUNGGU_PERSETUJUAN_VENDOR
+  MENUNGGU_TTD_VENDOR
+  SELESAI
+  DITOLAK
+}
+
+enum FileKind {
+  ORIGINAL          // PDF yang diunggah user
+  PREPARED          // ORIGINAL + Lembar Pengesahan
+  SIGNED_TBIG       // setelah ttd TBIG
+  STAMPED_METERAI   // setelah eMeterai dibubuhkan
+  FINAL             // setelah ttd vendor
+}
+
+enum SignJobType {
+  AUTO_SIGN_TBIG
+  STAMP_METERAI
+  SIGN_VENDOR
+}
+
+enum SignJobStatus {
+  PENDING          // sudah dikirim ke provider, menunggu hasil
+  WAITING_SIGNER   // menunggu penandatangan (khusus SIGN_VENDOR)
+  COMPLETED
+  FAILED
+}
+
+model Vendor {
+  id         String      @id @default(cuid())
+  nama       String
+  alamat     String?
+  picNama    String
+  picJabatan String
+  users      User[]
+  pengadaan  Pengadaan[]
+  createdAt  DateTime    @default(now())
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  nama         String
+  role         Role
+  vendorId     String?
+  vendor       Vendor?  @relation(fields: [vendorId], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model Pengadaan {
+  id                   String          @id @default(cuid())
+  namaPengadaan        String
+  alamat               String
+  harga                BigInt          // rupiah, tanpa desimal
+  tanggalMulai         DateTime        // tanggal pengadaan (from)
+  tanggalSelesai       DateTime        // tanggal pengadaan (to)
+  noSuratPesanan       String          @unique
+  tanggalPenyelesaian  DateTime
+  vendorId             String
+  vendor               Vendor          @relation(fields: [vendorId], references: [id])
+  picNama              String
+  picJabatan           String
+  status               PengadaanStatus @default(DRAFT)
+  alasanPenolakan      String?
+  tbigSignedAt         DateTime?
+  vendorRespondedAt    DateTime?
+  meteraiStampedAt     DateTime?
+  vendorSignedAt       DateTime?
+  createdById          String
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  files                DocumentFile[]
+  jobs                 SignJob[]
+  logs                 ActivityLog[]
+}
+
+model DocumentFile {
+  id          String    @id @default(cuid())
+  pengadaanId String
+  pengadaan   Pengadaan @relation(fields: [pengadaanId], references: [id], onDelete: Cascade)
+  kind        FileKind
+  storageKey  String
+  sizeBytes   Int
+  sha256      String
+  createdAt   DateTime  @default(now())
+
+  @@unique([pengadaanId, kind])
+}
+
+model SignJob {
+  id             String        @id @default(cuid())
+  pengadaanId    String
+  pengadaan      Pengadaan     @relation(fields: [pengadaanId], references: [id], onDelete: Cascade)
+  type           SignJobType
+  status         SignJobStatus @default(PENDING)
+  provider       String        // "mock" | "mekari"
+  externalId     String?       @unique
+  signUrl        String?
+  inputFileKind  FileKind
+  outputFileKind FileKind
+  errorMessage   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  completedAt    DateTime?
+}
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  externalId  String?
+  eventType   String?
+  payload     Json
+  processedAt DateTime?
+  error       String?
+  receivedAt  DateTime  @default(now())
+}
+
+model ActivityLog {
+  id          String    @id @default(cuid())
+  pengadaanId String
+  pengadaan   Pengadaan @relation(fields: [pengadaanId], references: [id], onDelete: Cascade)
+  actorId     String?   // null = sistem/webhook
+  action      String
+  note        String?
+  createdAt   DateTime  @default(now())
 }

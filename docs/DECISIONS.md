@@ -87,4 +87,17 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
   7. Halaman detail Vendor dan TBIG kini menampilkan status `SELESAI` beserta tombol unduh dokumen `FINAL`.
 - **Konsekuensi**: Seluruh siklus hidup pengadaan (T1 s.d. T8) tuntas dari draft hingga dokumen final berkekuatan hukum penuh (ttd TBIG, eMeterai, dan ttd Vendor), simulasi Fase 1 dapat diuji secara mandiri tanpa pihak ketiga, dan arsitektur siap dialihkan ke Mekari asli pada Fase 2.
 
+### 2026-09-21 - Penyempurnaan UI, Error Boundary, Loading Skeletons, Validasi Eksternal & Panduan Deployment (Step 1.11)
+- **Konteks**: Tahap akhir Fase 1 sesuai PRD Step 1.11 untuk memastikan kesiapan produksi: standarisasi visual timeline activity log, penyediaan empty/loading/error states yang ramah, build script Vercel-ready, panduan instalasi & demo di `README.md`, serta verifikasi menyeluruh 8 skenario uji.
+- **Keputusan**:
+  1. Dibuat komponen `ActivityLogTimeline` (`src/components/ActivityLogTimeline.tsx`) yang memetakan kode event teknis ke teks Bahasa Indonesia yang manusiawi dengan indikator visual terstandarisasi (antislop).
+  2. Dibuat error boundary global (`src/app/error.tsx`) dan halaman 404 (`src/app/not-found.tsx`) yang elegan dengan opsi navigasi kembali yang jelas.
+  3. Disediakan loading states (`loading.tsx`) dengan skeleton layout pada halaman daftar dan detail pengadaan baik di portal TBIG maupun portal Vendor.
+  4. Skema Zod pengadaan dipisahkan ke `src/lib/validations/pengadaan.ts` untuk memisahkan domain validasi dari dependensi runtime client Next.js, memungkinkan pengujian validasi form otomatis dari CLI script.
+  5. Script `build` pada `package.json` diperbarui menjadi `"prisma generate && next build"` untuk memastikan client database selalu ter-generate otomatis saat deployment Vercel.
+  6. Dokumen `README.md` ditulis ulang secara lengkap mencakup arsitektur, diagram status, panduan setup lokal, akun demo, langkah demo 5 menit, dan prosedur deploy ke Vercel (Supabase prod port 6543/5432, region Singapore `sin1`).
+  7. Dibuat skrip verifikasi otomatis `scripts/verify-all-scenarios.ts` yang berhasil memvalidasi 100% dari 8 skenario uji yang disyaratkan pada PRD Bagian 10.
+- **Konsekuensi**: Fase 1 (Mock) tuntas 100% dengan tingkat kesiapan produksi tinggi, dokumentasi lengkap, dan siap dilanjutkan ke demo pengguna maupun deploy cloud.
+
+
 

@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { formatRupiah, formatDateIndo } from "@/lib/pdf/lembar-pengesahan";
 import { FileKind, PengadaanStatus, SignJobStatus } from "@/generated/prisma/enums";
+import { ActivityLogTimeline } from "@/components/ActivityLogTimeline";
 import { SignTbigDialog } from "./SignTbigDialog";
 import { RetryTbigSignButton } from "./RetryTbigSignButton";
 
@@ -326,24 +327,7 @@ export default async function DetailPengadaanPage({
               Riwayat Aktivitas
             </h2>
 
-            <div className="relative pl-3 space-y-4 before:absolute before:left-1 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-200">
-              {pengadaan.logs.map((log) => (
-                <div key={log.id} className="relative pl-3 text-xs">
-                  <span className="absolute -left-3 top-1.5 w-2 h-2 rounded-full bg-blue-600 ring-4 ring-white" />
-                  <p className="font-semibold text-zinc-800">{log.action}</p>
-                  {log.note && <p className="text-zinc-600 mt-0.5">{log.note}</p>}
-                  <p className="text-zinc-500 mt-1">
-                    {new Intl.DateTimeFormat("id-ID", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }).format(new Date(log.createdAt))}
-                  </p>
-                </div>
-              ))}
-            </div>
+            <ActivityLogTimeline logs={pengadaan.logs} />
           </div>
         </div>
 

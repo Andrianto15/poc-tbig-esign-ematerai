@@ -91,7 +91,7 @@ export default async function VendorPengadaanPage() {
                     <td className="px-6 py-4 font-mono font-medium text-zinc-900">
                       {item.noSuratPesanan}
                     </td>
-                    <td className="px-6 py-4 font-medium text-zinc-900">
+                    <td className="px-6 py-4 font-medium text-zinc-900 max-w-xs break-words">
                       {item.namaPengadaan}
                     </td>
                     <td className="px-6 py-4 font-semibold text-zinc-900">

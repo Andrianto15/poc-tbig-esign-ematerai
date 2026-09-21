@@ -104,7 +104,7 @@ export default async function TbigPengadaanListPage({
                     <td className="px-6 py-4 font-mono font-medium text-zinc-900">
                       {p.noSuratPesanan}
                     </td>
-                    <td className="px-6 py-4 font-medium text-zinc-900 max-w-xs truncate">
+                    <td className="px-6 py-4 font-medium text-zinc-900 max-w-xs break-words">
                       {p.namaPengadaan}
                     </td>
                     <td className="px-6 py-4 text-zinc-600">{p.vendor.nama}</td>

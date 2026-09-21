@@ -46,7 +46,7 @@ export class SupabaseStorage implements Storage {
       .from(this.bucket)
       .upload(key, bytes, {
         contentType,
-        upsert: false,
+        upsert: true,
       });
 
     if (error) {

@@ -75,3 +75,16 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
   6. Alasan penolakan ditampilkan transparan pada banner detail pengadaan di kedua sisi (portal Vendor dan portal TBIG).
 - **Konsekuensi**: Proteksi data lintas vendor dan kerahasiaan draft internal TBIG terjamin, alur penolakan patuh terhadap aturan arsitektur workflow, dan komunikasi alasan penolakan terlihat jelas oleh kedua belah pihak.
 
+### 2026-09-21 - Alur Setuju Vendor, Pembubuhan eMeterai, Mock Mekari Sign OTP & Dokumen Final (Step 1.10)
+- **Konteks**: Menyelesaikan alur persetujuan pengadaan oleh vendor: transisi T6 (Setuju -> job `STAMP_METERAI`), transisi T7 (meterai selesai -> job `SIGN_VENDOR` dengan `signUrl` mock), simulasi web browser Mekari Sign OTP (`/mock-mekari/sign/[jobId]`), dan transisi T8 (ttd vendor selesai -> status `SELESAI` & file `FINAL`).
+- **Keputusan**:
+  1. Transisi T6 diimplementasikan dalam `submitVendorApproval` di `src/lib/workflow/pengadaan-workflow.ts`: memvalidasi status `MENUNGGU_PERSETUJUAN_VENDOR`, memperbarui status menjadi `MENUNGGU_TTD_VENDOR`, mengisi `vendorRespondedAt`, dan memicu job `STAMP_METERAI` pada dokumen `SIGNED_TBIG`. Fungsi ini juga menangani skenario retry jika job `STAMP_METERAI` sebelumnya berstatus `FAILED`.
+  2. Transisi T7 (`completeMeteraiTransition`) otomatis menyimpan file `STAMPED_METERAI`, mencatat `meteraiStampedAt`, dan membuat job `SIGN_VENDOR` dengan status `WAITING_SIGNER` serta `signUrl` mock.
+  3. Dibuat halaman tanda tangan simulasi `/mock-mekari/sign/[jobId]` (PRD Bagian 8.7): hanya aktif jika `ESIGN_MODE=mock`, menampilkan banner simulasi, pratinjau PDF input via route `/api/mock-mekari/preview/[jobId]`, dan validasi OTP `123456`.
+  4. Server Action `submitMockSignAction` membubuhkan tanda tangan simulasi vendor di koordinat `LAYOUT.vendorSignature` pada halaman Lembar Pengesahan, menyimpan hasilnya ke mock storage, memanggil `handleESignEvent` (`COMPLETED`/`FAILED`), dan mengarahkan kembali pengguna ke halaman detail pengadaan.
+  5. Transisi T8 (`completeVendorSignTransition`) mengunduh dokumen hasil tanda tangan vendor, mengunggah versi `FINAL` ke storage aplikasi, memperbarui status pengadaan ke `SELESAI`, mencatat `vendorSignedAt`, dan merekam `ActivityLog` `VENDOR_SIGNED`.
+  6. Pada `SupabaseStorage.put`, parameter `upsert` diset ke `true` agar mendukung pembaruan/overwrite dokumen mock maupun final secara konsisten seperti driver `LocalStorage`.
+  7. Halaman detail Vendor dan TBIG kini menampilkan status `SELESAI` beserta tombol unduh dokumen `FINAL`.
+- **Konsekuensi**: Seluruh siklus hidup pengadaan (T1 s.d. T8) tuntas dari draft hingga dokumen final berkekuatan hukum penuh (ttd TBIG, eMeterai, dan ttd Vendor), simulasi Fase 1 dapat diuji secara mandiri tanpa pihak ketiga, dan arsitektur siap dialihkan ke Mekari asli pada Fase 2.
+
+

@@ -597,6 +597,252 @@ export async function completeTbigSignTransition(
   return updatedJob;
 }
 
+export interface SubmitVendorApprovalInput {
+  pengadaanId: string;
+  vendorId: string;
+  actorId: string;
+}
+
+/**
+ * Transisi T6: Vendor menyetujui pengadaan (MENUNGGU_PERSETUJUAN_VENDOR -> MENUNGGU_TTD_VENDOR)
+ * Memicu job STAMP_METERAI pada dokumen SIGNED_TBIG.
+ * Juga menangani retry jika job STAMP_METERAI sebelumnya FAILED pada status MENUNGGU_TTD_VENDOR.
+ */
+export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
+  const pengadaan = await prisma.pengadaan.findUnique({
+    where: { id: input.pengadaanId },
+    include: {
+      files: true,
+      jobs: { orderBy: { createdAt: "desc" } },
+    },
+  });
+
+  if (!pengadaan) {
+    throw new Error("Pengadaan tidak ditemukan.");
+  }
+
+  if (pengadaan.vendorId !== input.vendorId) {
+    throw new Error("Pengadaan ini bukan milik vendor Anda.");
+  }
+
+  const isInitialApproval =
+    pengadaan.status === PengadaanStatus.MENUNGGU_PERSETUJUAN_VENDOR;
+  const isRetryMeterai =
+    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_VENDOR &&
+    pengadaan.jobs[0]?.type === SignJobType.STAMP_METERAI &&
+    pengadaan.jobs[0]?.status === SignJobStatus.FAILED;
+
+  if (!isInitialApproval && !isRetryMeterai) {
+    throw new Error(
+      `Persetujuan vendor hanya dapat diajukan saat status MENUNGGU_PERSETUJUAN_VENDOR atau saat job eMeterai gagal (saat ini: ${pengadaan.status}).`
+    );
+  }
+
+  const signedTbigFile = pengadaan.files.find(
+    (f) => f.kind === FileKind.SIGNED_TBIG
+  );
+  if (!signedTbigFile) {
+    throw new Error("Dokumen bertanda tangan TBIG (SIGNED_TBIG) tidak ditemukan.");
+  }
+
+  const storage = getStorage();
+  const signedPdfBytes = await storage.get(signedTbigFile.storageKey);
+  if (!signedPdfBytes) {
+    throw new Error("Gagal mengunduh dokumen SIGNED_TBIG dari storage.");
+  }
+
+  const doc = await PDFDocument.load(signedPdfBytes);
+  const targetPage = doc.getPageCount();
+
+  const provider = getESignProvider();
+  const jobId = crypto.randomUUID();
+  const baseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
+  const token = process.env.ESIGN_WEBHOOK_TOKEN || "";
+  const callbackUrl = `${baseUrl}/api/webhooks/esign?token=${token}`;
+
+  // 1. Panggil provider stampMeterai
+  let result;
+  try {
+    result = await provider.stampMeterai({
+      jobId,
+      pdf: signedPdfBytes,
+      filename: `pengadaan-${pengadaan.noSuratPesanan}-meterai.pdf`,
+      page: targetPage,
+      box: LAYOUT.vendorMeterai,
+      callbackUrl,
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    await prisma.signJob.create({
+      data: {
+        id: jobId,
+        pengadaanId: input.pengadaanId,
+        type: SignJobType.STAMP_METERAI,
+        status: SignJobStatus.FAILED,
+        provider: provider.name,
+        inputFileKind: FileKind.SIGNED_TBIG,
+        outputFileKind: FileKind.STAMPED_METERAI,
+        errorMessage: errorMsg,
+      },
+    });
+    throw err;
+  }
+
+  // 2. Transisi status pengadaan jika persetujuan awal
+  if (isInitialApproval) {
+    const updated = await prisma.pengadaan.updateMany({
+      where: {
+        id: input.pengadaanId,
+        vendorId: input.vendorId,
+        status: PengadaanStatus.MENUNGGU_PERSETUJUAN_VENDOR,
+      },
+      data: {
+        status: PengadaanStatus.MENUNGGU_TTD_VENDOR,
+        vendorRespondedAt: new Date(),
+      },
+    });
+
+    if (updated.count === 0) {
+      throw new Error("Gagal menyetujui pengadaan: Status pengadaan telah berubah.");
+    }
+  }
+
+  // 3. Simpan SignJob baru status PENDING
+  const job = await prisma.signJob.create({
+    data: {
+      id: jobId,
+      pengadaanId: input.pengadaanId,
+      type: SignJobType.STAMP_METERAI,
+      status: SignJobStatus.PENDING,
+      provider: provider.name,
+      externalId: result.externalId,
+      inputFileKind: FileKind.SIGNED_TBIG,
+      outputFileKind: FileKind.STAMPED_METERAI,
+    },
+  });
+
+  // 4. Catat ActivityLog
+  await prisma.activityLog.create({
+    data: {
+      pengadaanId: input.pengadaanId,
+      actorId: input.actorId,
+      action: isRetryMeterai ? "METERAI_STAMP_RETRY" : "VENDOR_APPROVED",
+      note: isRetryMeterai
+        ? "Pengajuan ulang pembubuhan eMeterai setelah kegagalan."
+        : "Pengadaan disetujui oleh Vendor. Memulai proses pembubuhan eMeterai.",
+    },
+  });
+
+  return {
+    pengadaanId: input.pengadaanId,
+    jobId: job.id,
+    externalId: result.externalId,
+  };
+}
+
+/**
+ * Pengajuan ulang tanda tangan vendor (retry SIGN_VENDOR) jika sebelumnya gagal.
+ */
+export async function retryVendorSign(input: SubmitVendorApprovalInput) {
+  const pengadaan = await prisma.pengadaan.findUnique({
+    where: { id: input.pengadaanId },
+    include: {
+      vendor: { include: { users: true } },
+      files: true,
+      jobs: { orderBy: { createdAt: "desc" } },
+    },
+  });
+
+  if (!pengadaan) {
+    throw new Error("Pengadaan tidak ditemukan.");
+  }
+
+  if (pengadaan.vendorId !== input.vendorId) {
+    throw new Error("Pengadaan ini bukan milik vendor Anda.");
+  }
+
+  const latestJob = pengadaan.jobs[0];
+  if (
+    pengadaan.status !== PengadaanStatus.MENUNGGU_TTD_VENDOR ||
+    latestJob?.type !== SignJobType.SIGN_VENDOR ||
+    latestJob?.status !== SignJobStatus.FAILED
+  ) {
+    throw new Error(
+      "Retry tanda tangan vendor hanya dapat dilakukan saat status MENUNGGU_TTD_VENDOR dan job SIGN_VENDOR gagal."
+    );
+  }
+
+  const stampedFile = pengadaan.files.find(
+    (f) => f.kind === FileKind.STAMPED_METERAI
+  );
+  if (!stampedFile) {
+    throw new Error("Dokumen dengan eMeterai (STAMPED_METERAI) tidak ditemukan.");
+  }
+
+  const storage = getStorage();
+  const stampedBytes = await storage.get(stampedFile.storageKey);
+  if (!stampedBytes) {
+    throw new Error("Gagal mengunduh dokumen STAMPED_METERAI dari storage.");
+  }
+
+  const doc = await PDFDocument.load(stampedBytes);
+  const targetPage = doc.getPageCount();
+
+  const provider = getESignProvider();
+  const nextJobId = crypto.randomUUID();
+  const baseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
+  const token = process.env.ESIGN_WEBHOOK_TOKEN || "";
+  const callbackUrl = `${baseUrl}/api/webhooks/esign?token=${token}`;
+  const returnUrl = `${baseUrl}/vendor/pengadaan/${pengadaan.id}`;
+
+  const vendorUser = pengadaan.vendor.users[0];
+  const signerEmail = vendorUser?.email || "vendor@poc.local";
+
+  const requestResult = await provider.requestSign({
+    jobId: nextJobId,
+    pdf: stampedBytes,
+    filename: `pengadaan-${pengadaan.noSuratPesanan}-final.pdf`,
+    signer: {
+      name: pengadaan.picNama,
+      email: signerEmail,
+    },
+    page: targetPage,
+    box: LAYOUT.vendorSignature,
+    callbackUrl,
+    returnUrl,
+  });
+
+  const job = await prisma.signJob.create({
+    data: {
+      id: nextJobId,
+      pengadaanId: pengadaan.id,
+      type: SignJobType.SIGN_VENDOR,
+      status: SignJobStatus.WAITING_SIGNER,
+      provider: provider.name,
+      externalId: requestResult.externalId,
+      signUrl: requestResult.signUrl,
+      inputFileKind: FileKind.STAMPED_METERAI,
+      outputFileKind: FileKind.FINAL,
+    },
+  });
+
+  await prisma.activityLog.create({
+    data: {
+      pengadaanId: pengadaan.id,
+      actorId: input.actorId,
+      action: "VENDOR_SIGN_RETRY",
+      note: "Pengajuan ulang permintaan tanda tangan vendor setelah kegagalan.",
+    },
+  });
+
+  return {
+    pengadaanId: pengadaan.id,
+    jobId: job.id,
+    externalId: requestResult.externalId,
+    signUrl: requestResult.signUrl,
+  };
+}
+
 /**
  * Transisi T7: Job STAMP_METERAI COMPLETED
  * Simpan STAMPED_METERAI, isi meteraiStampedAt, buat SignJob(SIGN_VENDOR)

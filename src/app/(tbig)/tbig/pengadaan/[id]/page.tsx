@@ -64,6 +64,30 @@ export default async function DetailPengadaanPage({
       {/* Auto refresh saat status sedang diproses */}
       {isProcessing && <AutoRefresh intervalMs={3000} />}
 
+      {/* Navigasi Kembali */}
+      <div>
+        <Link
+          href="/tbig/pengadaan"
+          className="inline-flex items-center text-xs font-medium text-zinc-500 hover:text-zinc-800 transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-4 h-4 mr-1"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+          Kembali ke Daftar Pengadaan
+        </Link>
+      </div>
+
       {/* Header Detail */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
         <div>
@@ -108,11 +132,43 @@ export default async function DetailPengadaanPage({
               rel="noopener noreferrer"
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
             >
-              Unduh PDF
+              {pengadaan.status === PengadaanStatus.SELESAI ? "Unduh PDF Final" : "Unduh PDF"}
             </a>
           )}
         </div>
       </div>
+
+      {/* Banner Selesai jika SELESAI */}
+      {pengadaan.status === PengadaanStatus.SELESAI && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 shadow-xs">
+          <div className="flex items-start space-x-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-sm font-bold text-emerald-900">
+                Pengadaan Telah Selesai
+              </p>
+              <p className="text-sm text-emerald-800 leading-relaxed">
+                Dokumen pengadaan telah selesai ditandatangani oleh kedua belah pihak dan dibubuhi eMeterai.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Banner Status Sedang Diproses */}
       {isProcessing && (

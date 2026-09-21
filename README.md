@@ -65,7 +65,7 @@ Aplikasi dilengkapi akun bawaan hasil *database seed*:
 ### Prasyarat
 - Node.js versi 20 atau lebih baru
 - npm versi 10 atau lebih baru
-- Database PostgreSQL (disarankan project Supabase gratis)
+- Database PostgreSQL & S3-compatible Object Storage (disarankan project Neon gratis)
 
 ### Langkah Instalasi
 1. **Clone repository & pasang dependensi:**
@@ -81,12 +81,12 @@ Aplikasi dilengkapi akun bawaan hasil *database seed*:
    cp .env.example .env
    ```
    Isi nilai-nilai berikut pada `.env`:
-   - `DATABASE_URL`: Connection string PostgreSQL Transaction Pooler (port `6543`)
-   - `DIRECT_URL`: Connection string PostgreSQL Session Pooler (port `5432`)
+   - `DATABASE_URL`: Connection string PostgreSQL Neon (Pooled connection)
+   - `DIRECT_URL`: Connection string PostgreSQL Neon (Direct / Unpooled)
    - `SESSION_SECRET`: String acak minimal 32 karakter
    - `APP_BASE_URL`: `http://localhost:3000`
-   - `STORAGE_DRIVER`: `supabase` (atau `local` untuk pengujian lokal tanpa storage Supabase)
-   - `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_STORAGE_BUCKET`: Diambil dari Dashboard Supabase
+   - `STORAGE_DRIVER`: `neon` (atau `local` untuk pengujian lokal di disk, atau `supabase`)
+   - `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_BUCKET_NAME`: Diambil dari Neon Storage Dashboard (*Connect*)
 
 3. **Inisialisasi Database & Storage:**
    ```bash
@@ -99,7 +99,7 @@ Aplikasi dilengkapi akun bawaan hasil *database seed*:
    # Masukkan data awal (users & vendors)
    npm run db:seed
 
-   # Setup private bucket storage di Supabase
+   # Setup private bucket storage di Neon (pengadaan-docs)
    npm run storage:setup
    ```
 
@@ -143,34 +143,33 @@ Ikuti alur demo berikut untuk menguji keseluruhan fitur:
 
 ## 6. Panduan Deployment ke Vercel (Production)
 
-1. **Persiapan Project Supabase Production:**
-   - Buat project Supabase khusus production di region Southeast Asia (Singapore).
-   - Pastikan Row Level Security (RLS) aktif pada semua tabel schema `public`.
+1. **Persiapan Project Neon Production:**
+   - Buat project Neon khusus production di region Southeast Asia (Singapore / `ap-southeast-1`).
+   - Buat bucket `pengadaan-docs` di tab Storage Neon.
    - Jalankan script migrasi, seed, dan storage setup dari terminal lokal dengan mengarahkan env ke production:
      ```bash
      DATABASE_URL="<prod-pooler-url>" DIRECT_URL="<prod-direct-url>" npm run db:deploy
      DATABASE_URL="<prod-pooler-url>" DIRECT_URL="<prod-direct-url>" npm run db:seed
-     SUPABASE_URL="<prod-url>" SUPABASE_SECRET_KEY="<prod-secret>" npm run storage:setup
+     AWS_ENDPOINT_URL_S3="<prod-s3-endpoint>" AWS_ACCESS_KEY_ID="<id>" AWS_SECRET_ACCESS_KEY="<secret>" npm run storage:setup
      ```
 
 2. **Pengaturan Project di Vercel:**
    - Hubungkan repository ke Vercel.
    - Pastikan **Build Command** menggunakan default: `prisma generate && next build`.
-   - Set **Serverless Function Region** ke Singapore (`sin1`) agar sedekat mungkin dengan database Supabase.
+   - Set **Serverless Function Region** ke Singapore (`sin1`) agar sedekat mungkin dengan database Neon.
    - Daftarkan seluruh Environment Variables di Vercel Project Settings:
-     - `DATABASE_URL` (port `6543`, `?pgbouncer=true&connection_limit=1`)
-     - `DIRECT_URL` (port `5432`)
+     - `DATABASE_URL` (Neon pooled connection string)
+     - `DIRECT_URL` (Neon direct connection string)
      - `SESSION_SECRET`
      - `APP_BASE_URL` (URL domain Vercel Anda, mis. `https://poc-esign-ematerai.vercel.app`)
-     - `STORAGE_DRIVER=supabase`
-     - `SUPABASE_URL`
-     - `SUPABASE_SECRET_KEY`
-     - `SUPABASE_STORAGE_BUCKET=pengadaan-docs`
+     - `STORAGE_DRIVER=neon`
+     - `AWS_ENDPOINT_URL_S3`
+     - `AWS_ACCESS_KEY_ID`
+     - `AWS_SECRET_ACCESS_KEY`
+     - `AWS_REGION=ap-southeast-1`
+     - `AWS_BUCKET_NAME=pengadaan-docs`
      - `ESIGN_MODE=mock` (Fase 1)
      - `ESIGN_WEBHOOK_TOKEN`
-
-> [!NOTE]
-> **Catatan Free Plan Supabase:** Project Supabase tier gratis otomatis di-*pause* jika tidak ada aktivitas selama 1 minggu. Sebelum presentasi atau demo, buka dashboard Supabase dan klik *Restore* bila project sedang ter-pause.
 
 ---
 

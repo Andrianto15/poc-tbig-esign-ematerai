@@ -29,3 +29,8 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
 - **Keputusan**: Menggunakan `@prisma/adapter-pg` dengan connection pool `pg`, menginisialisasi singleton di `src/lib/db.ts`, dan menggunakan `ALTER TABLE IF EXISTS "_prisma_migrations"` pada migrasi `enable_rls` agar kompatibel dengan shadow database Prisma Migrate.
 - **Konsekuensi**: Eksekusi runtime berjalan cepat dan stabil, seluruh tabel Supabase terproteksi RLS, dan migrasi dev berjalan bersih.
 
+### 2026-09-21 - Autentikasi `iron-session` & Proteksi Route di Middleware
+- **Konteks**: Diperlukan sesi terenkripsi tanpa dependensi state eksternal (Supabase Auth tidak dipakai sesuai PRD), serta verifikasi role di middleware dan Server Actions.
+- **Keputusan**: Menggunakan `iron-session` v8 dengan cookie terenkripsi `poc_tbig_session`. Pada `middleware.ts`, autentikasi dievaluasi menggunakan `unsealData` untuk kompatibilitas performa tinggi, dan helper `requireRole` mengamankan Server Components / layout.
+- **Konsekuensi**: Autentikasi stateless, aman, dan mematuhi isolasi role TBIG vs Vendor.
+

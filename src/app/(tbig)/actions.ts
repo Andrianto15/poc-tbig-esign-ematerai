@@ -25,7 +25,10 @@ export async function createPengadaanAction(
   const rawData = {
     namaPengadaan: formData.get("namaPengadaan"),
     alamat: formData.get("alamat"),
-    harga: formData.get("harga"),
+    harga:
+      typeof formData.get("harga") === "string"
+        ? (formData.get("harga") as string).replace(/\D/g, "")
+        : formData.get("harga"),
     tanggalMulai: formData.get("tanggalMulai"),
     tanggalSelesai: formData.get("tanggalSelesai"),
     noSuratPesanan: formData.get("noSuratPesanan"),
@@ -81,7 +84,10 @@ export async function updatePengadaanAction(
   const rawData = {
     namaPengadaan: formData.get("namaPengadaan"),
     alamat: formData.get("alamat"),
-    harga: formData.get("harga"),
+    harga:
+      typeof formData.get("harga") === "string"
+        ? (formData.get("harga") as string).replace(/\D/g, "")
+        : formData.get("harga"),
     tanggalMulai: formData.get("tanggalMulai"),
     tanggalSelesai: formData.get("tanggalSelesai"),
     noSuratPesanan: formData.get("noSuratPesanan"),

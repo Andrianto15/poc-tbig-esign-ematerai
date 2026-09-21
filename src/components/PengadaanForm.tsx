@@ -25,6 +25,13 @@ interface InitialData {
   picJabatan: string;
 }
 
+function formatRibuan(val: string | number | undefined): string {
+  if (!val && val !== 0) return "";
+  const clean = String(val).replace(/\D/g, "");
+  if (!clean) return "";
+  return new Intl.NumberFormat("id-ID").format(Number(clean));
+}
+
 export function PengadaanForm({
   action,
   vendors,
@@ -38,6 +45,13 @@ export function PengadaanForm({
 }) {
   const [state, formAction, isPending] = useActionState(action, {});
 
+  const [displayHarga, setDisplayHarga] = useState(() =>
+    formatRibuan(initialData?.harga)
+  );
+  const [rawHarga, setRawHarga] = useState(() =>
+    initialData?.harga ? String(initialData.harga).replace(/\D/g, "") : ""
+  );
+
   const [selectedVendorId, setSelectedVendorId] = useState(
     initialData?.vendorId || (vendors.length > 0 ? vendors[0].id : "")
   );
@@ -47,6 +61,12 @@ export function PengadaanForm({
   const [picJabatan, setPicJabatan] = useState(
     initialData?.picJabatan || (vendors.length > 0 ? vendors[0].picJabatan : "")
   );
+
+  const handleHargaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, "");
+    setRawHarga(raw);
+    setDisplayHarga(formatRibuan(raw));
+  };
 
   const handleVendorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const vId = e.target.value;
@@ -135,16 +155,21 @@ export function PengadaanForm({
             <label className="block text-sm font-medium text-zinc-700 mb-1">
               Harga Pengadaan (Rupiah) <span className="text-red-500">*</span>
             </label>
-            <input
-              name="harga"
-              type="number"
-              min={1}
-              step={1}
-              defaultValue={initialData?.harga}
-              required
-              placeholder="Contoh: 150000000"
-              className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm text-zinc-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            />
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500 text-sm font-medium">
+                Rp
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={displayHarga}
+                onChange={handleHargaChange}
+                required
+                placeholder="150.000.000"
+                className="w-full pl-10 pr-3 py-2 border border-zinc-300 rounded-lg text-sm text-zinc-900 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+              />
+            </div>
+            <input type="hidden" name="harga" value={rawHarga} />
             {state?.fieldErrors?.harga && (
               <p className="text-xs text-red-600 mt-1">
                 {state.fieldErrors.harga[0]}

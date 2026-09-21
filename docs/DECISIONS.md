@@ -34,3 +34,9 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
 - **Keputusan**: Menggunakan `iron-session` v8 dengan cookie terenkripsi `poc_tbig_session`. Pada `middleware.ts`, autentikasi dievaluasi menggunakan `unsealData` untuk kompatibilitas performa tinggi, dan helper `requireRole` mengamankan Server Components / layout.
 - **Konsekuensi**: Autentikasi stateless, aman, dan mematuhi isolasi role TBIG vs Vendor.
 
+### 2026-09-21 - Abstraksi Storage & Proteksi Private File Stream
+- **Konteks**: Dokumen pengadaan sensitif harus disimpan secara private di Supabase Storage tanpa URL publik langsung, dengan opsi fallback `LocalStorage` untuk pengembangan offline.
+- **Keputusan**: Dibuat interface `Storage` dengan implementasi `SupabaseStorage` (menggunakan client `server-only` dan secret key) dan `LocalStorage`. Route `api/files/[fileId]` memeriksa izin aktor (isolasi vendor dan status draft) sebelum men-stream dokumen sebagai `application/pdf` inline.
+- **Konsekuensi**: Dokumen aman dari akses publik tidak sah, policy storage client tertutup total, dan siap untuk deployment serverless Vercel.
+
+

@@ -39,4 +39,10 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
 - **Keputusan**: Dibuat interface `Storage` dengan implementasi `SupabaseStorage` (menggunakan client `server-only` dan secret key) dan `LocalStorage`. Route `api/files/[fileId]` memeriksa izin aktor (isolasi vendor dan status draft) sebelum men-stream dokumen sebagai `application/pdf` inline.
 - **Konsekuensi**: Dokumen aman dari akses publik tidak sah, policy storage client tertutup total, dan siap untuk deployment serverless Vercel.
 
+### 2026-09-21 - Generator Lembar Pengesahan & Single Source of Truth Layout
+- **Konteks**: Setiap dokumen pengadaan wajib disematkan halaman Lembar Pengesahan di akhir PDF dengan penempatan kotak tanda tangan dan meterai yang presisi dan tidak tumpang tindih.
+- **Keputusan**: Layout koordinat disimpan tunggal di `src/lib/pdf/signature-layout.ts` dengan sistem koordinat top-left origin A4 (595 × 842 pt), dikonversi secara matematis saat digambar oleh `pdf-lib`. Generator menambahkan data terstruktur (tabel pengadaan, nama penandatangan, footer) dan helper `toMekariAnnotation` dipersiapkan untuk integrasi Mekari di Fase 2.
+- **Konsekuensi**: Koordinat konsisten untuk rendering visual lokal maupun pengiriman koordinat tanda tangan ke API Mekari.
+
+
 

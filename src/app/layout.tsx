@@ -15,6 +15,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Portal Pengadaan TBIG - eSign & eMeterai",
   description: "PoC Pengadaan Tower Bersama Group dengan Mekari eSign & eMeterai",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "32x32" },
+    ],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

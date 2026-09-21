@@ -42,7 +42,10 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
 ### 2026-09-21 - Generator Lembar Pengesahan & Single Source of Truth Layout
 - **Konteks**: Setiap dokumen pengadaan wajib disematkan halaman Lembar Pengesahan di akhir PDF dengan penempatan kotak tanda tangan dan meterai yang presisi dan tidak tumpang tindih.
 - **Keputusan**: Layout koordinat disimpan tunggal di `src/lib/pdf/signature-layout.ts` dengan sistem koordinat top-left origin A4 (595 × 842 pt), dikonversi secara matematis saat digambar oleh `pdf-lib`. Generator menambahkan data terstruktur (tabel pengadaan, nama penandatangan, footer) dan helper `toMekariAnnotation` dipersiapkan untuk integrasi Mekari di Fase 2.
-- **Konsekuensi**: Koordinat konsisten untuk rendering visual lokal maupun pengiriman koordinat tanda tangan ke API Mekari.
+### 2026-09-21 - Workflow Modul Pengadaan (Step 1.6) & Atomic Execution
+- **Konteks**: Modul pengadaan harus mematuhi Aturan AI Agent #4 (seluruh perubahan status harus melalui modul workflow) dan mengelola file versi `ORIGINAL` dan `PREPARED` beserta log audit `ActivityLog`.
+- **Keputusan**: Seluruh operasi CRUD dan transisi status (T1 `createDraftPengadaan`, T2 `updateDraftPengadaan`, serta `deleteDraftPengadaan`) diisolasi di `src/lib/workflow/pengadaan-workflow.ts`. Pembuatan draft memanfaatkan atomic nested insert Prisma (otomatis membungkus `Pengadaan`, `DocumentFile`, dan `ActivityLog` dalam satu transaksi native PostgreSQL tanpa session lock), dan penghapusan memanfaatkan native foreign key `onDelete: Cascade`.
+- **Konsekuensi**: Operasi database bersifat atomik, bebas dari masalah connection exhaustion pada PgBouncer/Supabase pooler (port 6543), dan kode server action `src/app/(tbig)/actions.ts` tetap tipis dan bersih dari query status langsung.
 
 
 

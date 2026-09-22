@@ -6,7 +6,7 @@ import {
   SubmitResult,
   ESignEvent,
 } from "../types";
-import { mekariRequest } from "./client";
+import { mekariRequest, MekariApiError } from "./client";
 import { buildHmacHeaders } from "./hmac";
 import { toMekariAnnotation } from "@/lib/pdf/signature-layout";
 
@@ -176,10 +176,18 @@ export class MekariESignProvider implements ESignProvider {
    * Cek status dokumen (fallback polling jika webhook terlambat)
    */
   async getStatus(externalId: string): Promise<ESignEvent | null> {
-    const res = await mekariRequest<MekariDocumentResponse>(
-      "GET",
-      `/documents/${externalId}`
-    );
+    let res: MekariDocumentResponse;
+    try {
+      res = await mekariRequest<MekariDocumentResponse>(
+        "GET",
+        `/documents/${externalId}`
+      );
+    } catch (err: unknown) {
+      if (err instanceof MekariApiError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    }
 
     const attrs = res.data.attributes;
     const signingStatus = (attrs?.signing_status || "").toLowerCase();
@@ -188,6 +196,7 @@ export class MekariESignProvider implements ESignProvider {
     // Berhasil jika meterai sukses atau ttd selesai
     if (
       stampingStatus === "success" ||
+      stampingStatus === "stamped" ||
       signingStatus === "completed" ||
       signingStatus === "success"
     ) {
@@ -204,7 +213,8 @@ export class MekariESignProvider implements ESignProvider {
       stampingStatus === "failed" ||
       signingStatus === "failed" ||
       signingStatus === "voided" ||
-      signingStatus === "rejected"
+      signingStatus === "rejected" ||
+      signingStatus === "declined"
     ) {
       return {
         provider: "mekari",

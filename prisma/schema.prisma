@@ -24,9 +24,10 @@ enum PengadaanStatus {
 enum FileKind {
   ORIGINAL          // PDF yang diunggah user
   PREPARED          // ORIGINAL + Lembar Pengesahan
-  SIGNED_TBIG       // setelah ttd TBIG
+  SIGNED_TBIG       // setelah ttd TBIG (legacy/opsional)
   STAMPED_METERAI   // setelah eMeterai dibubuhkan
-  FINAL             // setelah ttd vendor
+  SIGNED_VENDOR     // setelah ttd vendor (+ meterai)
+  FINAL             // setelah ttd TBIG (dokumen selesai)
 }
 
 enum SignJobType {

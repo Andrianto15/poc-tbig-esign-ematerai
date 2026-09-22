@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { signPengadaanAsTbigAction } from "@/app/(tbig)/actions";
+import { sendPengadaanToVendorAction } from "@/app/(tbig)/actions";
 
-interface SignTbigDialogProps {
+interface SendToVendorDialogProps {
   pengadaanId: string;
 }
 
-export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
+export function SendToVendorDialog({ pengadaanId }: SendToVendorDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -23,10 +23,10 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, isPending]);
 
-  const handleSign = () => {
+  const handleSend = () => {
     setError(null);
     startTransition(async () => {
-      const res = await signPengadaanAsTbigAction(pengadaanId);
+      const res = await sendPengadaanToVendorAction(pengadaanId);
       if (res?.error) {
         setError(res.error);
       } else {
@@ -40,7 +40,7 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm cursor-pointer flex items-center space-x-2"
+        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-xs cursor-pointer flex items-center space-x-2"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -53,22 +53,22 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
           />
         </svg>
-        <span>Tandatangani sebagai TBIG</span>
+        <span>Kirim ke Mitra</span>
       </button>
 
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-labelledby="sign-tbig-dialog-title"
+          aria-labelledby="send-vendor-dialog-title"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/50 backdrop-blur-xs animate-in fade-in duration-150"
         >
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-zinc-200 space-y-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+              <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   className="w-5 h-5"
@@ -80,23 +80,27 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
               </div>
               <div>
-                <h3 id="sign-tbig-dialog-title" className="text-lg font-bold text-zinc-900">
-                  Konfirmasi Tanda Tangan TBIG
+                <h3
+                  id="send-vendor-dialog-title"
+                  className="text-lg font-bold text-zinc-900"
+                >
+                  Ajukan Dokumen ke Mitra
                 </h3>
-                <p className="text-xs text-zinc-500">Auto Sign Dokumen Pengadaan</p>
+                <p className="text-xs text-zinc-500">
+                  Review & Persetujuan Pengadaan
+                </p>
               </div>
             </div>
 
             <p className="text-sm text-zinc-600 leading-relaxed">
-              Apakah Anda yakin ingin menandatangani dokumen pengadaan ini secara
-              elektronik sebagai <strong>Pihak Pertama (TBIG)</strong>? Dokumen
-              yang telah disetujui dan ditandatangani oleh vendor akan diselesaikan
-              menjadi dokumen pengadaan final.
+              Apakah Anda yakin ingin mengirim dokumen pengadaan ini ke pihak{" "}
+              <strong>Mitra/Vendor</strong> untuk ditinjau? Dokumen akan dapat
+              dilihat oleh vendor terkait untuk disetujui atau ditolak.
             </p>
 
             {error && (
@@ -117,8 +121,8 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
               <button
                 type="button"
                 disabled={isPending}
-                onClick={handleSign}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
+                onClick={handleSend}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-xs disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
               >
                 {isPending ? (
                   <>
@@ -142,10 +146,10 @@ export function SignTbigDialog({ pengadaanId }: SignTbigDialogProps) {
                         d="M4 12a8 8 0 018-8v8H4z"
                       />
                     </svg>
-                    <span>Memproses...</span>
+                    <span>Mengirim...</span>
                   </>
                 ) : (
-                  <span>Ya, Tandatangani</span>
+                  <span>Ya, Kirim Dokumen</span>
                 )}
               </button>
             </div>

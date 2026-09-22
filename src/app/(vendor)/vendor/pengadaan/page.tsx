@@ -24,12 +24,12 @@ export default async function VendorPengadaanPage() {
     );
   }
 
-  // PRD 7.4 & 8.5: Vendor hanya melihat pengadaan miliknya dengan status >= MENUNGGU_PERSETUJUAN_VENDOR
+  // PRD 7.4 & 8.5: Vendor hanya melihat pengadaan miliknya yang sudah diajukan (status bukan DRAFT)
   const pengadaanList = await prisma.pengadaan.findMany({
     where: {
       vendorId: user.vendorId,
       status: {
-        notIn: [PengadaanStatus.DRAFT, PengadaanStatus.MENUNGGU_TTD_TBIG],
+        not: PengadaanStatus.DRAFT,
       },
     },
     orderBy: {
@@ -43,7 +43,7 @@ export default async function VendorPengadaanPage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Daftar Pengadaan</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Pengadaan yang telah ditandatangani TBIG dan membutuhkan tindakan atau tinjauan Anda.
+            Pengadaan dari TBIG yang membutuhkan tindakan atau tinjauan Anda.
           </p>
         </div>
       </div>

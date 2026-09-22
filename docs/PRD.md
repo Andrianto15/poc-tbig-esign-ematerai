@@ -23,6 +23,7 @@
 TBIG membutuhkan alur persetujuan dokumen pengadaan dengan vendor yang ditandatangani secara elektronik. PoC ini membuktikan bahwa:
 
 - data pengadaan dan dokumennya bisa dikelola di aplikasi internal,
+- alur persetujuan berurutan berjalan mulus: **TBIG membuat draft pengadaan -> Mitra/Vendor me-review -> jika Mitra setuju, dokumen dibubuhi eMeterai dan ditandatangani Mitra -> TBIG menandatangani dokumen -> Dokumen Selesai**,
 - penandatanganan TBIG, pembubuhan eMeterai, dan penandatanganan vendor bisa dijalankan dari aplikasi ini melalui API Mekari eSign,
 - kedua pihak bisa memantau status dokumen dari aplikasi yang sama.
 
@@ -37,10 +38,10 @@ PoC dibagi dua fase:
 
 ### 2.1 Aktor
 
-| Aktor | Deskripsi |
-|---|---|
-| User TBIG | Satu akun. Menginput pengadaan, mengunggah PDF, menandatangani sebagai TBIG, memantau status semua pengadaan. |
-| Vendor | Beberapa akun (masing-masing terhubung ke satu entitas vendor). Hanya melihat pengadaan yang ditujukan ke vendornya. Bisa Setuju (bubuh meterai + tanda tangan) atau Tolak. |
+| Aktor     | Deskripsi                                                                                                                                                                                                         |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User TBIG | Satu akun. Menginput pengadaan, mengunggah PDF, mengirim dokumen ke mitra untuk ditinjau, menandatangani sebagai TBIG setelah disetujui & ditandatangani mitra, memantau status semua pengadaan.                  |
+| Vendor    | Beberapa akun (masing-masing terhubung ke satu entitas vendor). Hanya melihat pengadaan yang ditujukan ke vendornya. Meninjau dokumen, lalu bisa Tolak (wajib alasan) atau Setuju (bubuh meterai + tanda tangan). |
 
 Semua akun dibuat lewat **seed**. Tidak ada fitur registrasi.
 
@@ -50,13 +51,14 @@ Semua akun dibuat lewat **seed**. Tidak ada fitur registrasi.
 2. TBIG: buat, lihat, edit (hanya status DRAFT), hapus (hanya status DRAFT) pengadaan.
 3. TBIG: upload PDF dokumen pengadaan.
 4. Sistem otomatis menambahkan halaman **Lembar Pengesahan** di akhir PDF.
-5. TBIG: tanda tangan via Auto Sign (tanpa membuka halaman Mekari).
-6. Vendor: lihat data + PDF, lalu **Tolak** (wajib alasan) atau **Setuju**.
-7. Saat vendor Setuju: eMeterai dibubuhkan di dekat kotak ttd vendor, lalu vendor diarahkan ke proses tanda tangan.
-8. Webhook untuk menerima hasil dari penyedia tanda tangan.
-9. Halaman daftar & detail dengan status dokumen untuk kedua role.
-10. Unduh PDF (versi terbaru yang tersedia, dan PDF final bila selesai).
-11. Riwayat aktivitas (activity log) di halaman detail.
+5. TBIG: kirim pengadaan draft ke Mitra/Vendor untuk ditinjau.
+6. Vendor: lihat data + PDF (status menunggu review), lalu **Tolak** (wajib alasan) atau **Setuju**.
+7. Saat vendor Setuju: eMeterai dibubuhkan di dekat kotak ttd vendor, lalu vendor menandatangani dokumen.
+8. Setelah vendor selesai menandatangani & dibubuhi meterai: giliran TBIG menandatangani via Auto Sign (atau konfirmasi TBIG).
+9. Webhook untuk menerima hasil dari penyedia tanda tangan.
+10. Halaman daftar & detail dengan status dokumen untuk kedua role.
+11. Unduh PDF (versi terbaru yang tersedia, dan PDF final bila selesai).
+12. Riwayat aktivitas (activity log) di halaman detail.
 
 ### 2.3 Di luar scope
 
@@ -70,18 +72,18 @@ Semua akun dibuat lewat **seed**. Tidak ada fitur registrasi.
 
 ## 3. Tech Stack
 
-| Komponen | Pilihan |
-|---|---|
-| Framework | Next.js (App Router, versi stabil terbaru) + TypeScript |
-| UI | Tailwind CSS (boleh + shadcn/ui) |
-| Database | Supabase Postgres (project cloud, region Southeast Asia / Singapore). Dev: project Supabase terpisah, atau Supabase CLI lokal (opsional, butuh Docker) |
-| ORM | Prisma (koneksi lewat Supavisor pooler Supabase) |
-| Auth | Session cookie terenkripsi (`iron-session`) + `bcryptjs` |
-| Validasi | `zod` |
-| PDF | `pdf-lib` (menambah halaman, menggambar ttd/meterai simulasi) |
-| Preview PDF | `<iframe>` / `<object>` ke route file yang terproteksi |
-| Storage file | Adapter: filesystem lokal (dev, opsional) / Supabase Storage, bucket **private** (dev & deploy) |
-| Deploy | Vercel |
+| Komponen     | Pilihan                                                                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Framework    | Next.js (App Router, versi stabil terbaru) + TypeScript                                                                                                |
+| UI           | Tailwind CSS (boleh + shadcn/ui)                                                                                                                       |
+| Database     | Supabase Postgres (project cloud, region Southeast Asia / Singapore). Dev: project Supabase terpisah, atau Supabase CLI lokal (opsional, butuh Docker) |
+| ORM          | Prisma (koneksi lewat Supavisor pooler Supabase)                                                                                                       |
+| Auth         | Session cookie terenkripsi (`iron-session`) + `bcryptjs`                                                                                               |
+| Validasi     | `zod`                                                                                                                                                  |
+| PDF          | `pdf-lib` (menambah halaman, menggambar ttd/meterai simulasi)                                                                                          |
+| Preview PDF  | `<iframe>` / `<object>` ke route file yang terproteksi                                                                                                 |
+| Storage file | Adapter: filesystem lokal (dev, opsional) / Supabase Storage, bucket **private** (dev & deploy)                                                        |
+| Deploy       | Vercel                                                                                                                                                 |
 
 ---
 
@@ -107,19 +109,19 @@ enum Role {
 
 enum PengadaanStatus {
   DRAFT
-  MENUNGGU_TTD_TBIG
   MENUNGGU_PERSETUJUAN_VENDOR
   MENUNGGU_TTD_VENDOR
+  MENUNGGU_TTD_TBIG
   SELESAI
   DITOLAK
 }
 
 enum FileKind {
   ORIGINAL          // PDF yang diunggah user
-  PREPARED          // ORIGINAL + Lembar Pengesahan
-  SIGNED_TBIG       // setelah ttd TBIG
+  PREPARED          // ORIGINAL + Lembar Pengesahan (ditinjau Vendor)
   STAMPED_METERAI   // setelah eMeterai dibubuhkan
-  FINAL             // setelah ttd vendor
+  SIGNED_VENDOR     // setelah ttd vendor
+  FINAL             // setelah ttd TBIG (selesai)
 }
 
 enum SignJobType {
@@ -248,11 +250,11 @@ Catatan: `BigInt` tidak bisa langsung di-serialize ke JSON. Konversi ke `string`
 
 ### 4.2 Data seed
 
-| Email | Password | Role | Keterangan |
-|---|---|---|---|
-| `tbig@poc.local` | `password123` | TBIG | Nama: "Admin Pengadaan TBIG" |
+| Email               | Password      | Role   | Keterangan                          |
+| ------------------- | ------------- | ------ | ----------------------------------- |
+| `tbig@poc.local`    | `password123` | TBIG   | Nama: "Admin Pengadaan TBIG"        |
 | `vendor1@poc.local` | `password123` | VENDOR | Vendor: "PT Contoh Konstruksi Satu" |
-| `vendor2@poc.local` | `password123` | VENDOR | Vendor: "PT Contoh Teknik Dua" |
+| `vendor2@poc.local` | `password123` | VENDOR | Vendor: "PT Contoh Teknik Dua"      |
 
 Email seed harus bisa di-override lewat env (`SEED_TBIG_EMAIL`, `SEED_VENDOR1_EMAIL`, `SEED_VENDOR2_EMAIL`) karena di Fase 2 email vendor harus alamat asli yang bisa menerima email dari Mekari.
 
@@ -262,29 +264,35 @@ Email seed harus bisa di-override lewat env (`SEED_TBIG_EMAIL`, `SEED_VENDOR1_EM
 
 ### 5.1 Label status di UI
 
-| Status | Label UI | Warna badge |
-|---|---|---|
-| `DRAFT` | Belum ditandatangani | abu-abu |
-| `MENUNGGU_TTD_TBIG` | Proses tanda tangan TBIG | biru |
-| `MENUNGGU_PERSETUJUAN_VENDOR` | Sudah ttd TBIG, menunggu persetujuan vendor | kuning |
-| `MENUNGGU_TTD_VENDOR` | Disetujui vendor, menunggu ttd vendor | ungu |
-| `SELESAI` | Sudah ttd vendor (selesai) | hijau |
-| `DITOLAK` | Pengadaan ditolak | merah |
+| Status                        | Label UI                               | Warna badge |
+| ----------------------------- | -------------------------------------- | ----------- |
+| `DRAFT`                       | Draft (belum diajukan)                 | abu-abu     |
+| `MENUNGGU_PERSETUJUAN_VENDOR` | Menunggu review vendor                 | kuning      |
+| `MENUNGGU_TTD_VENDOR`         | Disetujui vendor, proses ttd & meterai | ungu        |
+| `MENUNGGU_TTD_TBIG`           | Sudah ttd vendor, menunggu ttd TBIG    | biru        |
+| `SELESAI`                     | Selesai ditandatangani                 | hijau       |
+| `DITOLAK`                     | Pengadaan ditolak                      | merah       |
 
 ### 5.2 Tabel transisi
 
-| # | Dari | Ke | Pemicu | Efek samping |
-|---|---|---|---|---|
-| T1 | (baru) | `DRAFT` | TBIG simpan form + upload PDF | Simpan `ORIGINAL`, generate `PREPARED` |
-| T2 | `DRAFT` | `DRAFT` | TBIG edit | Jika PDF/data berubah, regenerate `PREPARED` |
-| T3 | `DRAFT` | `MENUNGGU_TTD_TBIG` | TBIG klik "Tandatangani" | Buat `SignJob(AUTO_SIGN_TBIG)` dari `PREPARED` |
-| T4 | `MENUNGGU_TTD_TBIG` | `MENUNGGU_PERSETUJUAN_VENDOR` | Event COMPLETED untuk job AUTO_SIGN_TBIG | Unduh & simpan `SIGNED_TBIG`, isi `tbigSignedAt` |
-| T5 | `MENUNGGU_PERSETUJUAN_VENDOR` | `DITOLAK` | Vendor klik "Tolak" + alasan (min. 10 karakter) | Isi `alasanPenolakan`, `vendorRespondedAt` |
-| T6 | `MENUNGGU_PERSETUJUAN_VENDOR` | `MENUNGGU_TTD_VENDOR` | Vendor klik "Setuju" | Isi `vendorRespondedAt`, buat `SignJob(STAMP_METERAI)` dari `SIGNED_TBIG` |
-| T7 | `MENUNGGU_TTD_VENDOR` | `MENUNGGU_TTD_VENDOR` | Event COMPLETED untuk job STAMP_METERAI | Simpan `STAMPED_METERAI`, isi `meteraiStampedAt`, buat `SignJob(SIGN_VENDOR)` dari `STAMPED_METERAI`, simpan `signUrl` |
-| T8 | `MENUNGGU_TTD_VENDOR` | `SELESAI` | Event COMPLETED untuk job SIGN_VENDOR | Simpan `FINAL`, isi `vendorSignedAt` |
+| #   | Dari                          | Ke                            | Pemicu                                          | Efek samping                                                                                                                      |
+| --- | ----------------------------- | ----------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| T1  | (baru)                        | `DRAFT`                       | TBIG simpan form + upload PDF                   | Simpan `ORIGINAL`, generate `PREPARED`                                                                                            |
+| T2  | `DRAFT`                       | `DRAFT`                       | TBIG edit                                       | Jika PDF/data berubah, regenerate `PREPARED`                                                                                      |
+| T3  | `DRAFT`                       | `MENUNGGU_PERSETUJUAN_VENDOR` | TBIG klik "Kirim ke Mitra"                      | Catat log pengiriman, dokumen `PREPARED` terbuka untuk ditinjau Vendor                                                            |
+| T4  | `MENUNGGU_PERSETUJUAN_VENDOR` | `DITOLAK`                     | Vendor klik "Tolak" + alasan (min. 10 karakter) | Isi `alasanPenolakan`, `vendorRespondedAt`                                                                                        |
+| T5  | `MENUNGGU_PERSETUJUAN_VENDOR` | `MENUNGGU_TTD_VENDOR`         | Vendor klik "Setuju"                            | Isi `vendorRespondedAt`, buat `SignJob(STAMP_METERAI)` dari `PREPARED`                                                            |
+| T6  | `MENUNGGU_TTD_VENDOR`         | `MENUNGGU_TTD_VENDOR`         | Event COMPLETED untuk job STAMP_METERAI         | Simpan `STAMPED_METERAI`, isi `meteraiStampedAt`, buat `SignJob(SIGN_VENDOR)` dari `STAMPED_METERAI`, simpan `signUrl`            |
+| T7  | `MENUNGGU_TTD_VENDOR`         | `MENUNGGU_TTD_TBIG`           | Event COMPLETED untuk job SIGN_VENDOR           | Simpan `SIGNED_VENDOR`, isi `vendorSignedAt`, picu `SignJob(AUTO_SIGN_TBIG)` dari `SIGNED_VENDOR` (atau sediakan tombol TTD TBIG) |
+| T8  | `MENUNGGU_TTD_TBIG`           | `SELESAI`                     | Event COMPLETED untuk job AUTO_SIGN_TBIG        | Simpan `FINAL`, isi `tbigSignedAt`                                                                                                |
 
-**Kegagalan job:** jika event FAILED diterima atau pemanggilan provider error, `SignJob.status = FAILED` dan `errorMessage` diisi. Status pengadaan **tidak berubah**. UI menampilkan pesan error dan tombol "Coba lagi" (TBIG untuk AUTO_SIGN_TBIG; vendor untuk STAMP_METERAI/SIGN_VENDOR) yang membuat job baru dengan tipe sama.
+**Kegagalan job:** jika event FAILED diterima atau pemanggilan provider error, `SignJob.status = FAILED` dan `errorMessage` diisi. Status pengadaan **tidak berubah**. UI menampilkan pesan error dan tombol "Coba lagi" (vendor untuk STAMP_METERAI/SIGN_VENDOR; TBIG untuk AUTO_SIGN_TBIG) yang membuat job baru dengan tipe sama.
+
+**Catatan teknis urutan eMeterai vs Tanda Tangan (Step 2.7):**
+Pada engine sandbox Mekari eSign, sertifikat digital Peruri pada pembubuhan eMeterai mengunci dokumen PDF, sehingga panggilan tanda tangan digital di atas dokumen ber-eMeterai dapat menghasilkan penolakan `File already has a certificate`. Dalam implementasi Fase 2, orkestrasi teknis backend dapat mengatur urutan kriptografis digital:
+
+1. _Opsi Multi-Signer Envelope_: Mengirim satu envelope request sign ke Mekari yang memuat Vendor Signer, TBIG Signer, dan anotasi eMeterai sekaligus; ATAU
+2. _Opsi Bertahap_: Secara bisnis Vendor menyetujui dan mengotorisasi ttd & meterai (T5/T6), lalu setelah seluruh signature digital (Vendor + TBIG) selesai dibubuhkan, job pembubuhan eMeterai dieksekusi sebelum dokumen difinalisasi (`FINAL`).
 
 **Aturan:**
 
@@ -319,8 +327,8 @@ Semua koordinat disimpan di `src/lib/pdf/signature-layout.ts` dalam sistem **top
 export const PAGE = { width: 595, height: 842 };
 
 export const LAYOUT = {
-  tbigSignature:   { x: 60,  y: 560, width: 180, height: 80 },
-  vendorMeterai:   { x: 330, y: 560, width: 80,  height: 80 },
+  tbigSignature: { x: 60, y: 560, width: 180, height: 80 },
+  vendorMeterai: { x: 330, y: 560, width: 80, height: 80 },
   vendorSignature: { x: 420, y: 560, width: 130, height: 80 },
 } as const;
 ```
@@ -379,7 +387,10 @@ docs/
 // src/lib/esign/types.ts
 export type Box = { x: number; y: number; width: number; height: number };
 
-export interface Signer { name: string; email: string }
+export interface Signer {
+  name: string;
+  email: string;
+}
 
 export interface AutoSignInput {
   jobId: string;
@@ -429,7 +440,7 @@ export interface ESignProvider {
   stampMeterai(input: StampMeteraiInput): Promise<SubmitResult>;
   requestSign(input: RequestSignInput): Promise<SubmitResult>;
   downloadDocument(externalId: string): Promise<Uint8Array>;
-  parseWebhook(req: Request): Promise<ESignEvent>;   // termasuk verifikasi keaslian
+  parseWebhook(req: Request): Promise<ESignEvent>; // termasuk verifikasi keaslian
   getStatus?(externalId: string): Promise<ESignEvent | null>; // fallback polling
 }
 ```
@@ -441,7 +452,7 @@ export interface ESignProvider {
 1. Cari `SignJob` berdasarkan `externalId`. Jika tidak ada, catat error di `WebhookEvent` dan keluar.
 2. Jika job sudah `COMPLETED`/`FAILED`, abaikan (idempoten).
 3. Jika `FAILED`: tandai job gagal, catat log.
-4. Jika `COMPLETED`: `provider.downloadDocument(externalId)`, simpan ke storage sebagai `outputFileKind`, tandai job selesai, lalu panggil transisi yang sesuai (T4 / T7 / T8).
+4. Jika `COMPLETED`: `provider.downloadDocument(externalId)`, simpan ke storage sebagai `outputFileKind`, tandai job selesai, lalu panggil transisi yang sesuai (T6 / T7 / T8).
 
 Route `api/webhooks/esign` hanya: simpan payload mentah ke `WebhookEvent` → `provider.parseWebhook` → `handleESignEvent` → update `processedAt`/`error` → balas `200` (balas `401` jika verifikasi gagal).
 
@@ -449,7 +460,7 @@ Route `api/webhooks/esign` hanya: simpan payload mentah ke `WebhookEvent` → `p
 
 - `middleware.ts`: `/tbig/*` hanya role TBIG, `/vendor/*` hanya role VENDOR, sisanya redirect ke `/login`.
 - Detail vendor: pengadaan harus milik `user.vendorId`; jika tidak → 404.
-- Vendor tidak boleh melihat pengadaan berstatus `DRAFT` atau `MENUNGGU_TTD_TBIG`.
+- Vendor tidak boleh melihat pengadaan berstatus `DRAFT`. Vendor dapat mengakses pengadaan miliknya mulai status `MENUNGGU_PERSETUJUAN_VENDOR` ke atas.
 - `api/files/[fileId]`: cek akses dengan aturan yang sama, lalu server mengunduh file dari Supabase Storage dan men-stream-nya ke browser. Bucket bersifat **private**, tanpa policy di `storage.objects`, sehingga hanya server (secret key) yang bisa membaca/menulis. Jangan memakai public URL, dan jangan membagikan signed URL ke client.
 - Upload: hanya `application/pdf`, cek magic bytes `%PDF`, maksimal 10 MB.
 - **Row Level Security (RLS) Supabase:** tabel di schema `public` otomatis terekspos lewat Data API Supabase. Aktifkan RLS di **semua** tabel tanpa membuat policy apa pun, sehingga akses lewat Data API/anon key tertutup total. Prisma tetap bisa mengakses karena terhubung sebagai role `postgres` yang mem-bypass RLS. Pastikan Security Advisor di dashboard Supabase tidak menampilkan peringatan "RLS disabled".
@@ -499,56 +510,69 @@ MEKARI_CLIENT_SECRET=
 ## 8. Halaman & Perilaku UI
 
 ### 8.1 Login (`/login`)
+
 Form email + password. Setelah login: TBIG → `/tbig/pengadaan`, Vendor → `/vendor/pengadaan`. Pesan error umum ("Email atau password salah").
 
 ### 8.2 TBIG — Daftar (`/tbig/pengadaan`)
+
 Tabel: No. Surat Pesanan, Nama Pengadaan, Nama Vendor, Harga, Status (badge), Terakhir diperbarui. Filter status (dropdown). Tombol "Buat Pengadaan".
 
 ### 8.3 TBIG — Form Buat/Edit
+
 Field (semua wajib):
 
-| Field | Tipe | Validasi |
-|---|---|---|
-| Nama Pengadaan | text | 3–200 karakter |
-| Alamat | textarea | 5–500 karakter |
-| Harga Pengadaan | number (Rupiah) | > 0, bilangan bulat |
-| Tanggal Pengadaan (dari) | date | — |
-| Tanggal Pengadaan (sampai) | date | ≥ tanggal dari |
-| No. Surat Pesanan | text | unik |
-| Tanggal Penyelesaian | date | ≥ tanggal pengadaan (dari) |
-| Vendor | select (dari tabel Vendor) | wajib |
-| PIC Vendor | text | default terisi dari vendor terpilih, bisa diubah |
-| Jabatan PIC | text | default terisi dari vendor terpilih, bisa diubah |
-| Dokumen PDF | file | PDF, ≤ 10 MB (opsional saat edit) |
+| Field                      | Tipe                       | Validasi                                         |
+| -------------------------- | -------------------------- | ------------------------------------------------ |
+| Nama Pengadaan             | text                       | 3–200 karakter                                   |
+| Alamat                     | textarea                   | 5–500 karakter                                   |
+| Harga Pengadaan            | number (Rupiah)            | > 0, bilangan bulat                              |
+| Tanggal Pengadaan (dari)   | date                       | —                                                |
+| Tanggal Pengadaan (sampai) | date                       | ≥ tanggal dari                                   |
+| No. Surat Pesanan          | text                       | unik                                             |
+| Tanggal Penyelesaian       | date                       | ≥ tanggal pengadaan (dari)                       |
+| Vendor                     | select (dari tabel Vendor) | wajib                                            |
+| PIC Vendor                 | text                       | default terisi dari vendor terpilih, bisa diubah |
+| Jabatan PIC                | text                       | default terisi dari vendor terpilih, bisa diubah |
+| Dokumen PDF                | file                       | PDF, ≤ 10 MB (opsional saat edit)                |
 
 Saat simpan → T1/T2, redirect ke detail.
 
 ### 8.4 TBIG — Detail (`/tbig/pengadaan/[id]`)
+
 - Kartu data pengadaan + badge status.
-- Preview PDF versi terbaru (urutan prioritas: FINAL > STAMPED_METERAI > SIGNED_TBIG > PREPARED) + tombol unduh.
-- Tombol sesuai status:
-  - `DRAFT`: "Edit", "Hapus", "Tandatangani sebagai TBIG" (dengan dialog konfirmasi).
-  - Job gagal: pesan error + "Coba lagi".
-- Jika `DITOLAK`: tampilkan alasan penolakan.
+- Preview PDF versi terbaru (urutan prioritas: FINAL > SIGNED_VENDOR > STAMPED_METERAI > PREPARED) + tombol unduh.
+- Tombol dan tampilan sesuai status:
+  - `DRAFT`: "Edit", "Hapus", "Kirim ke Mitra" (dengan dialog konfirmasi) → T3.
+  - `MENUNGGU_PERSETUJUAN_VENDOR`: Banner info bahwa dokumen sedang ditinjau oleh Vendor.
+  - `MENUNGGU_TTD_VENDOR`: Banner info bahwa Vendor menyetujui, proses pembubuhan eMeterai & tanda tangan vendor sedang berlangsung.
+  - `MENUNGGU_TTD_TBIG`: Tombol "Tandatangani sebagai TBIG" (atau auto-sign langsung berjalan) → T8.
+  - Job gagal: pesan error + "Coba lagi" (sesuai tahap job).
+- Jika `DITOLAK`: tampilkan alasan penolakan dari Vendor.
 - Timeline activity log.
-- Jika status sedang diproses (`MENUNGGU_TTD_TBIG`, `MENUNGGU_TTD_VENDOR`): auto-refresh setiap 3 detik (`router.refresh()`).
+- Jika status sedang diproses (`MENUNGGU_TTD_VENDOR`, `MENUNGGU_TTD_TBIG`): auto-refresh setiap 3 detik (`router.refresh()`).
 
 ### 8.5 Vendor — Daftar (`/vendor/pengadaan`)
+
 Tabel pengadaan milik vendor (status ≥ `MENUNGGU_PERSETUJUAN_VENDOR`): No. SP, Nama Pengadaan, Harga, Status.
 
 ### 8.6 Vendor — Detail (`/vendor/pengadaan/[id]`)
-- Data pengadaan + preview PDF (versi yang sudah ditandatangani TBIG atau lebih baru).
+
+- Data pengadaan + preview PDF (versi PREPARED saat review awal, atau versi lebih baru setelah diproses).
 - Status `MENUNGGU_PERSETUJUAN_VENDOR`: tombol **Setuju** dan **Tolak**.
-  - Tolak → dialog alasan (min. 10 karakter) → T5.
-  - Setuju → dialog konfirmasi ("Dokumen akan dibubuhi eMeterai lalu Anda akan diarahkan ke proses tanda tangan") → T6.
+  - Tolak → dialog alasan (min. 10 karakter) → T4.
+  - Setuju → dialog konfirmasi ("Dokumen akan dibubuhi eMeterai lalu Anda akan diarahkan ke proses tanda tangan") → T5.
 - Status `MENUNGGU_TTD_VENDOR`:
   - Job meterai masih proses → "Sedang membubuhkan eMeterai…" (auto-refresh).
   - Job SIGN_VENDOR `WAITING_SIGNER` dengan `signUrl` → tombol **Lanjutkan Tanda Tangan** (buka `signUrl`).
-  - Job SIGN_VENDOR tanpa `signUrl` (Fase 2, jika Mekari hanya mengirim email) → pesan "Silakan cek email Anda dari Mekari Sign untuk menandatangani."
+  - Job SIGN_VENDOR tanpa `signUrl` (Fase 2, jika Mekari hanya mengirim email) → pesan "Silakan cek email Anda dari Mekari Sign untuk menandatangani." + tombol "Cek status".
+- Status `MENUNGGU_TTD_TBIG`:
+  - Info banner: "Dokumen telah Anda tanda tangani. Menunggu proses tanda tangan oleh pihak TBIG." (auto-refresh).
 - Status `SELESAI`: unduh PDF final.
 
 ### 8.7 Mock Mekari — Halaman Tanda Tangan (`/mock-mekari/sign/[jobId]`)
+
 Hanya aktif jika `ESIGN_MODE=mock` (selain itu 404). Meniru halaman Mekari:
+
 - Banner "SIMULASI — bukan Mekari Sign asli".
 - Preview dokumen, input OTP (terima `123456`), tombol "Tanda Tangani".
 - Setelah sukses → mock menghasilkan dokumen bertanda tangan, mengirim event COMPLETED, redirect ke `returnUrl`.
@@ -559,15 +583,16 @@ Hanya aktif jika `ESIGN_MODE=mock` (selain itu 404). Meniru halaman Mekari:
 
 `MockESignProvider` menyimpan dokumen hasil di storage dengan key `mock/{externalId}.pdf`.
 
-| Method | Perilaku |
-|---|---|
-| `autoSign` | Gambar ttd simulasi di box TBIG → simpan hasil → jadwalkan event COMPLETED setelah `MOCK_ESIGN_DELAY_MS` |
-| `stampMeterai` | Gambar meterai simulasi di box meterai → simpan → jadwalkan event COMPLETED |
-| `requestSign` | Simpan PDF input + metadata → kembalikan `signUrl = ${APP_BASE_URL}/mock-mekari/sign/{jobId}`. Tidak ada event sampai signer menandatangani di halaman mock |
-| `downloadDocument` | Baca `mock/{externalId}.pdf` |
-| `parseWebhook` | Tidak dipakai jalur utama (event mock memanggil `handleESignEvent` langsung), tapi tetap diimplementasikan agar route webhook bisa dites manual |
+| Method             | Perilaku                                                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoSign`         | Gambar ttd simulasi di box TBIG → simpan hasil → jadwalkan event COMPLETED setelah `MOCK_ESIGN_DELAY_MS`                                                    |
+| `stampMeterai`     | Gambar meterai simulasi di box meterai → simpan → jadwalkan event COMPLETED                                                                                 |
+| `requestSign`      | Simpan PDF input + metadata → kembalikan `signUrl = ${APP_BASE_URL}/mock-mekari/sign/{jobId}`. Tidak ada event sampai signer menandatangani di halaman mock |
+| `downloadDocument` | Baca `mock/{externalId}.pdf`                                                                                                                                |
+| `parseWebhook`     | Tidak dipakai jalur utama (event mock memanggil `handleESignEvent` langsung), tapi tetap diimplementasikan agar route webhook bisa dites manual             |
 
 Detail:
+
 - "Menjadwalkan event" dilakukan dengan `after()` dari `next/server` (jalankan setelah response dikirim, tunggu delay, lalu panggil `handleESignEvent`). Jika `after()` tidak tersedia, panggil langsung secara sinkron setelah delay.
 - Ttd simulasi: kotak berisi teks "Ditandatangani secara elektronik", nama penandatangan, timestamp, dan tulisan "SIMULASI".
 - Meterai simulasi: kotak berwarna dengan teks "e-METERAI SIMULASI 10000" dan nomor seri acak.
@@ -579,15 +604,17 @@ Detail:
 # FASE 1 — Mock (tanpa akun Mekari)
 
 ### Step 1.1 — Inisialisasi project
+
 - Buat project Next.js + TypeScript + Tailwind + ESLint.
 - Tambahkan script `lint`, `typecheck` (`tsc --noEmit`), `db:migrate` (`prisma migrate dev`), `db:deploy` (`prisma migrate deploy`), `db:seed`.
 - Buat `.env.example` (bagian 7.5) dan `docs/DECISIONS.md`.
-- **Prasyarat manusia:** buat project Supabase (region Southeast Asia / Singapore), simpan database password, lalu salin connection string Prisma dari menu *Connect* ke `.env` sebagai `DATABASE_URL` dan `DIRECT_URL`. Disarankan dua project: `poc-pengadaan-dev` dan `poc-pengadaan-prod`.
+- **Prasyarat manusia:** buat project Supabase (region Southeast Asia / Singapore), simpan database password, lalu salin connection string Prisma dari menu _Connect_ ke `.env` sebagai `DATABASE_URL` dan `DIRECT_URL`. Disarankan dua project: `poc-pengadaan-dev` dan `poc-pengadaan-prod`.
 - (Opsional) Jika ingin database lokal: `npx supabase init` + `npx supabase start` (butuh Docker), lalu pakai URL lokal di `.env`.
 
 **Selesai jika:** `npm run dev` menampilkan halaman awal; lint & typecheck lolos; `npx prisma db pull` (atau skrip cek koneksi sederhana) berhasil terhubung ke Supabase.
 
 ### Step 1.2 — Database & seed
+
 - Tulis `prisma/schema.prisma` sesuai bagian 4.1, jalankan `npm run db:migrate`.
 - Buat migrasi SQL tambahan (`prisma migrate dev --create-only --name enable_rls`) yang menjalankan `ALTER TABLE "<nama_tabel>" ENABLE ROW LEVEL SECURITY;` untuk setiap tabel (termasuk `_prisma_migrations`), lalu terapkan. Setiap tabel baru di kemudian hari juga wajib diaktifkan RLS-nya.
 - Tulis `prisma/seed.ts` sesuai bagian 4.2 (idempoten: upsert berdasarkan email/nama).
@@ -595,6 +622,7 @@ Detail:
 **Selesai jika:** `npm run db:seed` dua kali berturut-turut tidak error dan tidak menduplikasi data; tabel terlihat di Table Editor Supabase dengan label RLS aktif; Security Advisor tidak menampilkan peringatan RLS.
 
 ### Step 1.3 — Autentikasi & proteksi route
+
 - Session dengan `iron-session`, login via server action, logout.
 - Helper `getCurrentUser()`, `requireRole(role)`.
 - `middleware.ts` sesuai bagian 7.4.
@@ -603,6 +631,7 @@ Detail:
 **Selesai jika:** login ketiga akun seed berhasil dan diarahkan ke halaman yang benar; vendor membuka `/tbig/...` → ditolak; tanpa login → ke `/login`.
 
 ### Step 1.4 — Storage adapter & route file
+
 - Interface `Storage { put(key, bytes, contentType), get(key), delete(key) }`.
 - Implementasi `SupabaseStorage` (default) dan `LocalStorage` (folder `LOCAL_STORAGE_DIR`, untuk dev tanpa internet; tambahkan `.storage/` ke `.gitignore`). `LocalStorage` tidak boleh dipakai di Vercel karena filesystem-nya read-only.
 - `SupabaseStorage` memakai client `@supabase/supabase-js` yang dibuat di `src/lib/storage/supabase.ts` dengan `import "server-only"` di baris pertama, `auth: { persistSession: false }`, dan `upsert: false` saat upload.
@@ -613,12 +642,14 @@ Detail:
 **Selesai jika:** `npm run storage:setup` dua kali tidak error dan bucket terlihat private di dashboard; skrip uji put/get/delete ke Supabase Storage berhasil; membuka URL publik objek (`/storage/v1/object/public/...`) gagal; akses file milik vendor lain lewat `api/files/[fileId]` → 404.
 
 ### Step 1.5 — Generator Lembar Pengesahan
+
 - `signature-layout.ts` (bagian 6.2) dan `lembar-pengesahan.ts`: input PDF bytes + data pengadaan → output PDF dengan halaman tambahan.
 - Script `scripts/preview-lembar.ts` yang menghasilkan contoh PDF ke `./.tmp/` untuk dicek visual, termasuk garis bantu box.
 
 **Selesai jika:** PDF contoh terbuka normal, halaman terakhir berisi data lengkap, dan tiga kotak (ttd TBIG, meterai, ttd vendor) berada di posisi sesuai layout dan tidak menimpa teks.
 
 ### Step 1.6 — CRUD pengadaan (TBIG)
+
 - Halaman daftar, buat, edit, detail (tanpa tombol tanda tangan dulu), hapus.
 - Validasi `zod` sesuai bagian 8.3 (di server; boleh juga di client).
 - T1/T2 lewat `pengadaan-workflow.ts`, termasuk simpan `ORIGINAL` + `PREPARED` dan activity log.
@@ -626,36 +657,42 @@ Detail:
 **Selesai jika:** TBIG bisa membuat pengadaan dengan PDF, melihat preview PDF yang sudah berisi Lembar Pengesahan, mengedit, dan menghapus draft. No. SP duplikat ditolak dengan pesan jelas.
 
 ### Step 1.7 — ESignProvider interface & Mock provider
+
 - `types.ts` (bagian 7.2), factory `getESignProvider()`.
 - `MockESignProvider` sesuai bagian 9 beserta `stamp-simulation.ts`.
 - `handle-esign-event.ts` (bagian 7.3) dan route `api/webhooks/esign`.
 
 **Selesai jika:** test/skrip memanggil `autoSign` pada PDF contoh → setelah delay, `handleESignEvent` terpanggil, dan file hasil terlihat bertanda tangan simulasi di posisi yang benar.
 
-### Step 1.8 — Tanda tangan TBIG
-- Tombol "Tandatangani sebagai TBIG" di detail → T3.
-- Tangani T4 via event.
-- Auto-refresh detail selama `MENUNGGU_TTD_TBIG`.
-- Tampilan job gagal + "Coba lagi".
+### Step 1.8 — Pengajuan ke Mitra & Halaman Review Vendor (T3, T4)
 
-**Selesai jika:** klik tanda tangan → status berubah ke "Proses tanda tangan TBIG" → beberapa detik kemudian menjadi "Sudah ttd TBIG, menunggu persetujuan vendor" dan preview menampilkan ttd TBIG. Dengan `MOCK_ESIGN_FAIL=AUTO_SIGN_TBIG`, error tampil dan "Coba lagi" berfungsi setelah env dihapus.
+- Tombol "Kirim ke Mitra" di detail TBIG → T3 (status berubah menjadi `MENUNGGU_PERSETUJUAN_VENDOR`).
+- Portal Vendor menampilkan daftar & detail pengadaan milik vendor yang berstatus `MENUNGGU_PERSETUJUAN_VENDOR` dengan preview PDF `PREPARED`.
+- Tombol Tolak di vendor + dialog alasan (min. 10 karakter) → T4 (`DITOLAK`).
+- Detail TBIG & Vendor menampilkan status penolakan beserta alasan.
 
-### Step 1.9 — Halaman vendor: daftar, detail, Tolak
-- Daftar & detail vendor dengan aturan visibilitas (bagian 7.4).
-- Tombol Tolak + dialog alasan → T5.
-- Detail TBIG menampilkan alasan penolakan.
+**Selesai jika:** TBIG berhasil mengirim dokumen pengadaan ke vendor; vendor1 hanya dapat melihat dokumen miliknya; penolakan oleh vendor mengubah status menjadi "Pengadaan ditolak" di kedua sisi beserta alasannya.
 
-**Selesai jika:** vendor1 hanya melihat pengadaan miliknya yang sudah ditandatangani TBIG; penolakan mengubah status di kedua sisi menjadi "Pengadaan ditolak" dengan alasan tampil.
+### Step 1.9 — Persetujuan Vendor: eMeterai & Tanda Tangan Vendor (T5, T6, T7)
 
-### Step 1.10 — Setuju: eMeterai + tanda tangan vendor
-- Tombol Setuju → T6 → job STAMP_METERAI.
-- Event meterai → T7 → job SIGN_VENDOR dengan `signUrl` mock.
-- Halaman `/mock-mekari/sign/[jobId]` (bagian 8.7).
-- Event ttd vendor → T8.
+- Tombol Setuju di detail vendor → T5 (`MENUNGGU_TTD_VENDOR`) → picu job `STAMP_METERAI`.
+- Event meterai selesai → T6 → picu job `SIGN_VENDOR` dengan `signUrl` mock.
+- Halaman `/mock-mekari/sign/[jobId]` (bagian 8.7) memvalidasi OTP `123456`.
+- Event ttd vendor selesai → T7 → status pengadaan berubah ke `MENUNGGU_TTD_TBIG`.
 
-**Selesai jika:** vendor klik Setuju → "Sedang membubuhkan eMeterai…" → tombol "Lanjutkan Tanda Tangan" muncul → OTP `123456` → kembali ke detail dengan status "Sudah ttd vendor (selesai)". PDF final berisi ttd TBIG, meterai, dan ttd vendor di posisi yang benar. Halaman TBIG menampilkan status yang sama.
+**Selesai jika:** vendor klik Setuju → proses pembubuhan eMeterai berhasil → lanjut tanda tangan dengan OTP → status pengadaan berubah menjadi `MENUNGGU_TTD_TBIG` dan dokumen memuat eMeterai serta tanda tangan vendor.
+
+### Step 1.10 — Tanda Tangan TBIG & Finalisasi Dokumen (T8)
+
+- Halaman detail TBIG mendeteksi status `MENUNGGU_TTD_TBIG`.
+- TBIG menandatangani via Auto Sign (atau tombol konfirmasi Tanda Tangan TBIG) → job `AUTO_SIGN_TBIG`.
+- Event ttd TBIG selesai → T8 → status berubah ke `SELESAI`, dokumen disimpan sebagai `FINAL`.
+- Auto-refresh detail selama pemrosesan dan opsi "Coba lagi" bila job gagal.
+
+**Selesai jika:** proses ttd TBIG selesai → status pengadaan di kedua sisi menjadi `SELESAI` ("Selesai ditandatangani") → preview dan tombol unduh menampilkan dokumen final lengkap dengan tanda tangan Vendor, eMeterai, dan tanda tangan TBIG.
 
 ### Step 1.11 — Penyempurnaan & deploy
+
 - Activity log timeline di kedua detail.
 - Empty state, loading state, pesan error yang ramah.
 - `README.md`: cara setup lokal, seed, akun demo, skenario demo.
@@ -664,7 +701,7 @@ Detail:
   - Set region Vercel Functions ke Singapore (`sin1`) agar dekat dengan database Supabase.
   - Tambahkan `prisma generate` ke build (`"build": "prisma generate && next build"`, atau `postinstall`).
   - Jalankan `npm run db:deploy`, `npm run db:seed`, dan `npm run storage:setup` ke project prod dari lokal (dengan env prod), bukan saat build.
-  - Catatan Free plan Supabase: project di-pause setelah 1 minggu tidak aktif. Buka aplikasi atau dashboard sehari sebelum demo; jika ter-pause, klik *Restore* di dashboard.
+  - Catatan Free plan Supabase: project di-pause setelah 1 minggu tidak aktif. Buka aplikasi atau dashboard sehari sebelum demo; jika ter-pause, klik _Restore_ di dashboard.
 
 **Selesai jika:** seluruh skenario uji (bagian 10) lolos di URL Vercel.
 
@@ -673,6 +710,7 @@ Detail:
 # FASE 2 — Integrasi Mekari eSign Sandbox
 
 Referensi dokumentasi:
+
 - eSign Open API (Postman): https://documenter.getpostman.com/view/21582074/2s93K1oecc
 - HMAC Authentication: https://sandbox-developers.mekari.com/docs/kb/hmac-authentication
 - Contoh HMAC Node.js: https://sandbox-developers.mekari.com/docs/kb/hmac-authentication/node
@@ -680,32 +718,34 @@ Referensi dokumentasi:
 Base URL sandbox HMAC: `https://sandbox-api.mekari.com/v2/esign-hmac/v1`
 
 ### Step 2.0 — Prasyarat (dikerjakan manusia, bukan agent)
+
 - [ ] Kredensial HMAC sandbox (client ID & secret) dari Mekari Developer Center / tim Mekari.
 - [ ] Akun TBIG di sandbox Mekari Sign sudah di-setup untuk **Auto Sign** (eKYC + spesimen tanda tangan).
 - [ ] Kuota eMeterai dan eKYC sandbox tersedia.
 - [ ] Email vendor untuk testing adalah email asli yang bisa diakses (isi `SEED_VENDOR1_EMAIL`, lalu seed ulang).
 - [ ] Jawaban Mekari untuk pertanyaan teknis berikut dicatat di `docs/mekari/qa.md`:
   1. **Auto Sign TBIG (Server-to-Server Signing Tanpa OTP)**:
-     - *Konteks*: Sistem TBIG harus menandatangani dokumen secara otomatis saat pengadaan disetujui, tanpa interaksi manual/OTP per dokumen dari user TBIG.
-     - *Pertanyaan*: Apakah fitur Auto Sign didukung via API HMAC? Apa nama endpoint dan metodenya? Apa prasyarat setup di portal Mekari (mis. eKYC perwakilan perusahaan, upload spesimen tanda tangan, aktivasi sertifikat enterprise)?
+     - _Konteks_: Sistem TBIG harus menandatangani dokumen secara otomatis saat pengadaan disetujui, tanpa interaksi manual/OTP per dokumen dari user TBIG.
+     - _Pertanyaan_: Apakah fitur Auto Sign didukung via API HMAC? Apa nama endpoint dan metodenya? Apa prasyarat setup di portal Mekari (mis. eKYC perwakilan perusahaan, upload spesimen tanda tangan, aktivasi sertifikat enterprise)?
   2. **Metode Akses Signer Eksternal (Vendor) — Signing URL vs Email Only**:
-     - *Konteks*: Setelah dokumen dibubuhi eMeterai, vendor harus menandatangani. Perlu dipastikan apakah vendor bisa tanda tangan langsung via tautan/embed di aplikasi web TBIG (in-app signing) atau wajib lewat email.
-     - *Pertanyaan*: Ketika memanggil API request sign untuk signer eksternal (email vendor), apakah response API mengembalikan URL penandatanganan (`signing_url` / `action_url`) atau dokumen **hanya** bisa diakses via tautan di email resmi Mekari? Jika ada signing URL, berapa masa berlakunya (TTL) dan apakah bisa di-regenerate jika kedaluwarsa?
+     - _Konteks_: Setelah dokumen dibubuhi eMeterai, vendor harus menandatangani. Perlu dipastikan apakah vendor bisa tanda tangan langsung via tautan/embed di aplikasi web TBIG (in-app signing) atau wajib lewat email.
+     - _Pertanyaan_: Ketika memanggil API request sign untuk signer eksternal (email vendor), apakah response API mengembalikan URL penandatanganan (`signing_url` / `action_url`) atau dokumen **hanya** bisa diakses via tautan di email resmi Mekari? Jika ada signing URL, berapa masa berlakunya (TTL) dan apakah bisa di-regenerate jika kedaluwarsa?
   3. **Aturan Urutan (Sequence) Pembubuhan eMeterai vs Tanda Tangan Digital**:
-     - *Konteks*: Dokumen PDF memuat tanda tangan TBIG, eMeterai resmi Peruri, dan tanda tangan vendor. Modifikasi layer dokumen setelah digital signature berisiko merusak validitas kriptografis signature sebelumnya (*document altered warning* di PDF reader).
-     - *Pertanyaan*: Bagaimana urutan pembubuhan yang sah dan didukung engine Mekari: (a) TBIG Sign -> Stamp eMeterai -> Vendor Sign, (b) TBIG Sign -> Vendor Sign -> Stamp eMeterai (meterai di akhir), atau (c) Stamp eMeterai terlebih dahulu sebelum semua tanda tangan? Apakah eMeterai dan ttd bisa disubmit dalam 1 API call atau wajib bertahap?
+     - _Konteks_: Dokumen PDF memuat tanda tangan TBIG, eMeterai resmi Peruri, dan tanda tangan vendor. Modifikasi layer dokumen setelah digital signature berisiko merusak validitas kriptografis signature sebelumnya (_document altered warning_ di PDF reader).
+     - _Pertanyaan_: Bagaimana urutan pembubuhan yang sah dan didukung engine Mekari: (a) TBIG Sign -> Stamp eMeterai -> Vendor Sign, (b) TBIG Sign -> Vendor Sign -> Stamp eMeterai (meterai di akhir), atau (c) Stamp eMeterai terlebih dahulu sebelum semua tanda tangan? Apakah eMeterai dan ttd bisa disubmit dalam 1 API call atau wajib bertahap?
   4. **Spesifikasi & Keamanan Callback / Webhook**:
-     - *Konteks*: Backend TBIG butuh event notifikasi asynchronous saat meterai selesai dibubuhkan, saat vendor selesai tanda tangan, atau saat terjadi kegagalan/penolakan.
-     - *Pertanyaan*: Kapan saja webhook dikirim dan apa daftar nama event-nya (mis. `document.signed`, `stamping.completed`, `document.rejected`)? Bagaimana contoh format JSON payload lengkap untuk masing-masing event? Bagaimana cara memverifikasi keaslian webhook agar aman dari spoofing (apakah ada header signature seperti HMAC SHA256 atau secret token)?
+     - _Konteks_: Backend TBIG butuh event notifikasi asynchronous saat meterai selesai dibubuhkan, saat vendor selesai tanda tangan, atau saat terjadi kegagalan/penolakan.
+     - _Pertanyaan_: Kapan saja webhook dikirim dan apa daftar nama event-nya (mis. `document.signed`, `stamping.completed`, `document.rejected`)? Bagaimana contoh format JSON payload lengkap untuk masing-masing event? Bagaimana cara memverifikasi keaslian webhook agar aman dari spoofing (apakah ada header signature seperti HMAC SHA256 atau secret token)?
   5. **Konvensi Sistem Koordinat Anotasi (Tanda Tangan & eMeterai)**:
-     - *Konteks*: Backend harus menentukan posisi bounding box ttd TBIG, eMeterai, dan ttd Vendor secara presisi pada layout Surat Pesanan PDF (format A4).
-     - *Pertanyaan*: Apa titik acuan origin `(0,0)` koordinat anotasi (Top-Left atau Bottom-Left standar PDF native)? Apa satuan unit yang digunakan (PDF points 595x842 pt, pixels, millimeter, atau persentase)? Berapa ukuran rekomendasi bounding box (`width` & `height`) untuk stempel eMeterai Peruri dan tanda tangan digital?
+     - _Konteks_: Backend harus menentukan posisi bounding box ttd TBIG, eMeterai, dan ttd Vendor secara presisi pada layout Surat Pesanan PDF (format A4).
+     - _Pertanyaan_: Apa titik acuan origin `(0,0)` koordinat anotasi (Top-Left atau Bottom-Left standar PDF native)? Apa satuan unit yang digunakan (PDF points 595x842 pt, pixels, millimeter, atau persentase)? Berapa ukuran rekomendasi bounding box (`width` & `height`) untuk stempel eMeterai Peruri dan tanda tangan digital?
   6. **Tipe Sertifikasi Tanda Tangan & eKYC (PSrE vs Simple Sign)**:
-     - *Konteks*: Menentukan apakah signer eksternal (vendor) wajib melewati proses verifikasi identitas (eKYC) dengan KTP & biometrik liveness, atau cukup tanda tangan elektronik sederhana.
-     - *Pertanyaan*: Apakah akun sandbox dan production ini menggunakan tanda tangan tersertifikasi PSrE Berinduk Kominfo? Apakah signer eksternal (vendor) diwajibkan registrasi & menyelesaikan eKYC sebelum bisa tanda tangan? Jika wajib eKYC, apakah bisa dilakukan on-the-fly saat membuka signing link? Apakah tersedia opsi simple electronic signature (cukup OTP email/SMS) jika eKYC tidak diharuskan?
+     - _Konteks_: Menentukan apakah signer eksternal (vendor) wajib melewati proses verifikasi identitas (eKYC) dengan KTP & biometrik liveness, atau cukup tanda tangan elektronik sederhana.
+     - _Pertanyaan_: Apakah akun sandbox dan production ini menggunakan tanda tangan tersertifikasi PSrE Berinduk Kominfo? Apakah signer eksternal (vendor) diwajibkan registrasi & menyelesaikan eKYC sebelum bisa tanda tangan? Jika wajib eKYC, apakah bisa dilakukan on-the-fly saat membuka signing link? Apakah tersedia opsi simple electronic signature (cukup OTP email/SMS) jika eKYC tidak diharuskan?
 - [ ] Ekspor koleksi Postman eSign (format Collection v2.1 JSON) dan simpan di `docs/mekari/esign-collection.json` agar agent bisa membaca endpoint lengkap.
 
 ### Step 2.1 — HMAC client
+
 Buat `src/lib/esign/mekari/hmac.ts` dan `client.ts`.
 
 ```ts
@@ -733,6 +773,7 @@ export function buildHmacHeaders(method: string, pathWithQuery: string) {
 ```
 
 Aturan penting:
+
 - `pathWithQuery` yang di-sign harus path **lengkap** termasuk prefix, mis. `/v2/esign-hmac/v1/profile?x=1`, bukan hanya `/profile`.
 - Header `Date` yang dikirim harus identik dengan yang di-sign.
 - `client.ts`: fungsi `mekariRequest(method, path, body?)` yang membangun URL dari `MEKARI_BASE_URL + MEKARI_ESIGN_PATH_PREFIX + path`, menambah header HMAC, timeout 30 detik, dan melempar error berisi status + body respons. Jangan log client secret atau isi dokumen base64.
@@ -741,22 +782,25 @@ Aturan penting:
 **Selesai jika:** `scripts/mekari-ping.ts` memanggil `GET /profile` di sandbox dan mengembalikan 200.
 
 ### Step 2.2 — Pemetaan endpoint
+
 Baca `docs/mekari/esign-collection.json` dan `docs/mekari/qa.md`, lalu buat `docs/mekari/endpoint-map.md`:
 
-| Kebutuhan | Method & path Mekari | Body penting | Response penting (id dokumen, signing URL) |
-|---|---|---|---|
-| Auto Sign TBIG | | | |
-| Stamp eMeterai | | | |
-| Request tanda tangan signer eksternal | | | |
-| Cek status dokumen | | | |
-| Unduh dokumen hasil | | | |
+| Kebutuhan                             | Method & path Mekari | Body penting | Response penting (id dokumen, signing URL) |
+| ------------------------------------- | -------------------- | ------------ | ------------------------------------------ |
+| Auto Sign TBIG                        |                      |              |                                            |
+| Stamp eMeterai                        |                      |              |                                            |
+| Request tanda tangan signer eksternal |                      |              |                                            |
+| Cek status dokumen                    |                      |              |                                            |
+| Unduh dokumen hasil                   |                      |              |                                            |
 
 Catatan: dokumen dikirim sebagai base64 (`doc`) + `filename`; annotation berisi `page`, `position_x`, `position_y`, `element_width`, `element_height`, `canvas_width`, `canvas_height`, `type_of`, plus `callback_url`. Isi tabel hanya dari sumber resmi di atas; bila ada yang tidak jelas, tandai "PERLU KONFIRMASI" dan jangan menebak.
 
 **Selesai jika:** semua baris terisi atau ditandai perlu konfirmasi, dan sudah direview manusia.
 
 ### Step 2.3 — MekariESignProvider
+
 Implementasikan `src/lib/esign/mekari/provider.ts` sesuai `ESignProvider`:
+
 - `autoSign`, `stampMeterai`, `requestSign`: kirim request sesuai endpoint-map, kembalikan `externalId` (id dokumen Mekari) dan `signUrl` bila ada.
 - `downloadDocument`: ambil file hasil (dari endpoint unduh atau URL di response status) → `Uint8Array`.
 - `getStatus`: panggil endpoint status, petakan ke `ESignEvent` (COMPLETED/FAILED/null jika masih proses).
@@ -765,6 +809,7 @@ Implementasikan `src/lib/esign/mekari/provider.ts` sesuai `ESignProvider`:
 **Selesai jika:** test integrasi manual (skrip) berhasil mengirim PDF contoh ke sandbox untuk masing-masing dari tiga operasi dan mendapat `externalId`.
 
 ### Step 2.4 — Webhook dari Mekari
+
 - Callback URL: `${APP_BASE_URL}/api/webhooks/esign?token=${ESIGN_WEBHOOK_TOKEN}`. `APP_BASE_URL` harus URL publik HTTPS (deploy preview Vercel, atau ngrok/cloudflared untuk lokal).
 - `parseWebhook`: validasi token, verifikasi keaslian sesuai jawaban Mekari (qa.md #4), petakan payload ke `ESignEvent`.
 - Semua payload mentah tetap disimpan di `WebhookEvent` sebelum diproses, untuk debugging.
@@ -772,11 +817,13 @@ Implementasikan `src/lib/esign/mekari/provider.ts` sesuai `ESignProvider`:
 **Selesai jika:** callback nyata dari sandbox tercatat di `WebhookEvent` dan diproses menjadi transisi yang benar.
 
 ### Step 2.5 — Fallback polling
+
 Tambahkan tombol "Cek status ke Mekari" di detail (muncul jika job `PENDING`/`WAITING_SIGNER` lebih dari 1 menit) yang memanggil `provider.getStatus` lalu `handleESignEvent`. Ini jaring pengaman jika webhook tidak sampai.
 
 **Selesai jika:** dengan webhook sengaja dimatikan (token salah), status tetap bisa diperbarui lewat tombol ini.
 
 ### Step 2.6 — Verifikasi koordinat
+
 - Kirim PDF contoh ke sandbox untuk ketiga operasi, unduh hasilnya, cek visual posisi ttd dan meterai.
 - Sesuaikan **hanya** fungsi `toMekariAnnotation` (konversi origin/skala), bukan `LAYOUT`.
 - Catat konvensi final di `docs/DECISIONS.md`.
@@ -784,13 +831,18 @@ Tambahkan tombol "Cek status ke Mekari" di detail (muncul jika job `PENDING`/`WA
 **Selesai jika:** ttd TBIG, meterai, dan ttd vendor mendarat tepat di kotak Lembar Pengesahan.
 
 ### Step 2.7 — Urutan meterai vs tanda tangan
-Sesuaikan urutan job di workflow T6/T7 berdasarkan jawaban Mekari (qa.md #3):
-- **Default (saat ini):** meterai dulu → ttd vendor.
-- Jika Mekari mensyaratkan urutan lain: ubah hanya di `pengadaan-workflow.ts` (job mana yang dibuat saat Setuju dan job mana yang dibuat setelahnya), status UI tetap sama.
 
-**Selesai jika:** PDF final di sandbox memiliki ttd TBIG, meterai, dan ttd vendor yang valid (cek dengan viewer PDF yang menampilkan panel signature, mis. Adobe Acrobat Reader).
+Sesuaikan orkestrasi teknis job di backend berdasarkan hasil evaluasi engine Mekari (qa.md #3):
+
+- Alur bisnis: Mitra menyetujui, menandatangani & dibubuhi meterai → TBIG menandatangani di akhir.
+- Orkestrasi Mekari Sandbox: Cegah penolakan `File already has a certificate` dengan memilih strategi:
+  - _Multi-Signer Envelope_: Mengirimkan seluruh signer (Vendor + TBIG) dan anotasi meterai dalam satu dokumen envelope; ATAU
+  - _Digital Signatures First_: Eksekusi tanda tangan digital vendor & TBIG terlebih dahulu, lalu disusul pembubuhan stempel resmi eMeterai Peruri sebelum difinalisasi.
+
+**Selesai jika:** PDF final di sandbox memiliki ttd Vendor, meterai, dan ttd TBIG yang valid (cek dengan viewer PDF yang menampilkan panel signature, mis. Adobe Acrobat Reader).
 
 ### Step 2.8 — Pengalaman vendor saat tanda tangan
+
 - Jika Mekari mengembalikan signing URL: tombol "Lanjutkan Tanda Tangan" membuka URL tersebut.
 - Jika hanya email: tampilkan pesan "Silakan cek email Anda dari Mekari Sign…" + tombol "Cek status".
 - Pastikan setelah vendor selesai tanda tangan, status di aplikasi berubah (via webhook atau polling).
@@ -798,6 +850,7 @@ Sesuaikan urutan job di workflow T6/T7 berdasarkan jawaban Mekari (qa.md #3):
 **Selesai jika:** vendor uji menyelesaikan tanda tangan (termasuk verifikasi identitas Mekari) tanpa perlu login ke aplikasi Mekari.
 
 ### Step 2.9 — Uji end-to-end di sandbox
+
 Jalankan seluruh skenario di bagian 10 dengan `ESIGN_MODE=mekari`. Catat hasil di `docs/mekari/e2e-result.md` (tanggal, skenario, hasil, catatan, screenshot bila perlu).
 
 **Selesai jika:** skenario 1–5 lolos; kendala yang bergantung pada Mekari tercatat jelas.
@@ -806,23 +859,23 @@ Jalankan seluruh skenario di bagian 10 dengan `ESIGN_MODE=mekari`. Catat hasil d
 
 ## 10. Skenario Uji
 
-| # | Skenario | Hasil yang diharapkan |
-|---|---|---|
-| 1 | Happy path: TBIG buat → ttd → vendor1 Setuju → meterai → ttd vendor | Status akhir `SELESAI` di kedua sisi; PDF final berisi ttd TBIG, meterai, ttd vendor |
-| 2 | Penolakan: TBIG buat → ttd → vendor1 Tolak dengan alasan | Status `DITOLAK`, alasan tampil di sisi TBIG, tidak ada job meterai/ttd vendor |
-| 3 | Isolasi akses: vendor2 membuka URL detail milik vendor1 (halaman & file) | 404 |
-| 4 | Visibilitas: pengadaan `DRAFT` tidak muncul di daftar vendor | Tidak muncul; URL detail → 404 |
-| 5 | Idempotensi: kirim ulang webhook yang sama untuk job yang sudah selesai | Tidak ada perubahan data; event tercatat di `WebhookEvent` |
-| 6 | Kegagalan job (mock: `MOCK_ESIGN_FAIL`) lalu "Coba lagi" | Error tampil, status pengadaan tidak berubah, retry berhasil |
-| 7 | Transisi tidak valid: memanggil aksi Setuju pada pengadaan `DRAFT` | Ditolak dengan pesan error |
-| 8 | Validasi form: tanggal "sampai" < "dari", harga 0, No. SP duplikat, file bukan PDF | Semua ditolak dengan pesan yang jelas |
+| #   | Skenario                                                                                   | Hasil yang diharapkan                                                                |
+| --- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| 1   | Happy path: TBIG buat draft → kirim ke vendor1 → vendor1 Setuju (ttd + meterai) → TBIG ttd | Status akhir `SELESAI` di kedua sisi; PDF final berisi ttd Vendor, meterai, ttd TBIG |
+| 2   | Penolakan: TBIG buat draft → kirim ke vendor1 → vendor1 Tolak dengan alasan                | Status `DITOLAK`, alasan tampil di sisi TBIG, tidak ada job meterai/ttd              |
+| 3   | Isolasi akses: vendor2 membuka URL detail milik vendor1 (halaman & file)                   | 404                                                                                  |
+| 4   | Visibilitas: pengadaan `DRAFT` tidak muncul di daftar vendor                               | Tidak muncul; URL detail → 404                                                       |
+| 5   | Idempotensi: kirim ulang webhook yang sama untuk job yang sudah selesai                    | Tidak ada perubahan data; event tercatat di `WebhookEvent`                           |
+| 6   | Kegagalan job (mock: `MOCK_ESIGN_FAIL`) lalu "Coba lagi"                                   | Error tampil, status pengadaan tidak berubah, retry berhasil                         |
+| 7   | Transisi tidak valid: memanggil aksi Setuju pada pengadaan `DRAFT`                         | Ditolak dengan pesan error                                                           |
+| 8   | Validasi form: tanggal "sampai" < "dari", harga 0, No. SP duplikat, file bukan PDF         | Semua ditolak dengan pesan yang jelas                                                |
 
 ---
 
 ## 11. Skenario Demo (±5 menit)
 
 1. Login sebagai TBIG → buat pengadaan baru dengan PDF contoh → tunjukkan preview dengan Lembar Pengesahan.
-2. Klik "Tandatangani sebagai TBIG" → status berubah otomatis → tunjukkan ttd TBIG di PDF.
-3. Logout → login sebagai vendor1 → buka pengadaan → klik Setuju → meterai terbubuh → Lanjutkan Tanda Tangan → selesai.
-4. Login kembali sebagai TBIG → daftar menampilkan status "Sudah ttd vendor (selesai)" → unduh PDF final.
-5. (Opsional) Buat pengadaan kedua → vendor menolak → tunjukkan status dan alasan penolakan.
+2. Klik "Kirim ke Mitra" → status berubah menjadi "Menunggu review vendor".
+3. Logout → login sebagai vendor1 → buka pengadaan → tinjau dokumen → klik Setuju → meterai terbubuh → Lanjutkan Tanda Tangan → status berubah ke "Sudah ttd vendor, menunggu ttd TBIG".
+4. Logout → login kembali sebagai TBIG → buka pengadaan → tinjau dokumen yang telah ber-meterai & ber-ttd vendor → klik "Tandatangani sebagai TBIG" (Auto Sign) → status berubah ke "Selesai ditandatangani" → unduh PDF final.
+5. (Opsional) Buat pengadaan kedua → kirim ke vendor → vendor menolak dengan alasan → tunjukkan status dan alasan penolakan di kedua sisi.

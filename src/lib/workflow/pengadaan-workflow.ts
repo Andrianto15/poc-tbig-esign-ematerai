@@ -386,215 +386,61 @@ export async function deleteDraftPengadaan(pengadaanId: string) {
 }
 
 /**
- * Transisi T3: TBIG mengajukan tanda tangan (DRAFT -> MENUNGGU_TTD_TBIG)
+ * Transisi T3: TBIG mengajukan dokumen pengadaan ke Mitra/Vendor (DRAFT -> MENUNGGU_PERSETUJUAN_VENDOR)
  */
-export async function submitTbigSign(pengadaanId: string, actorId: string) {
+export async function submitPengadaanToVendor(
+  pengadaanId: string,
+  actorId: string
+) {
   const pengadaan = await prisma.pengadaan.findUnique({
     where: { id: pengadaanId },
-    include: {
-      files: true,
-      jobs: {
-        where: { type: SignJobType.AUTO_SIGN_TBIG },
-        orderBy: { createdAt: "desc" },
-      },
-    },
+    include: { files: true },
   });
 
   if (!pengadaan) {
     throw new Error("Pengadaan tidak ditemukan.");
   }
 
-  const isDraft = pengadaan.status === PengadaanStatus.DRAFT;
-  const isRetry =
-    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG &&
-    pengadaan.jobs[0]?.status === SignJobStatus.FAILED;
-
-  if (!isDraft && !isRetry) {
+  if (pengadaan.status !== PengadaanStatus.DRAFT) {
     throw new Error(
-      `Pengadaan hanya dapat ditandatangani saat status DRAFT atau setelah job gagal (saat ini: ${pengadaan.status}).`
+      `Pengadaan hanya dapat diajukan ke vendor saat status DRAFT (saat ini: ${pengadaan.status}).`
     );
   }
 
   const prepFile = pengadaan.files.find((f) => f.kind === FileKind.PREPARED);
   if (!prepFile) {
-    throw new Error("Dokumen PREPARED (Lembar Pengesahan) belum digenerate.");
+    throw new Error("Dokumen PREPARED (Lembar Pengesahan) belum tersedia.");
   }
 
-  const storage = getStorage();
-  const prepBytes = await storage.get(prepFile.storageKey);
-  if (!prepBytes) {
-    throw new Error("Gagal mengunduh dokumen PREPARED dari storage.");
-  }
-
-  // Ambil jumlah halaman PDF untuk menentukan halaman Lembar Pengesahan (1-indexed)
-  const doc = await PDFDocument.load(prepBytes);
-  const targetPage = doc.getPageCount();
-
-  const provider = getESignProvider();
-  const jobId = crypto.randomUUID();
-
-  const baseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
-  const token = process.env.ESIGN_WEBHOOK_TOKEN || "";
-  const callbackUrl = `${baseUrl}/api/webhooks/esign?token=${token}`;
-
-  // 1. Panggil provider autoSign
-  let result;
-  try {
-    result = await provider.autoSign({
-      jobId,
-      pdf: prepBytes,
-      filename: `pengadaan-${pengadaan.noSuratPesanan}.pdf`,
-      page: targetPage,
-      box: LAYOUT.tbigSignature,
-      callbackUrl,
-    });
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    await prisma.signJob.create({
-      data: {
-        id: jobId,
-        pengadaanId,
-        type: SignJobType.AUTO_SIGN_TBIG,
-        status: SignJobStatus.FAILED,
-        provider: provider.name,
-        inputFileKind: FileKind.PREPARED,
-        outputFileKind: FileKind.SIGNED_TBIG,
-        errorMessage: errorMsg,
-      },
-    });
-    throw err;
-  }
-
-  // 2. Transisi status pengadaan dengan optimistic check (jika dari DRAFT)
-  if (isDraft) {
-    const updated = await prisma.pengadaan.updateMany({
-      where: {
-        id: pengadaanId,
-        status: PengadaanStatus.DRAFT,
-      },
-      data: {
-        status: PengadaanStatus.MENUNGGU_TTD_TBIG,
-      },
-    });
-
-    if (updated.count === 0) {
-      throw new Error("Gagal mengajukan tanda tangan: Status pengadaan telah berubah.");
-    }
-  }
-
-  // 3. Simpan SignJob baru status PENDING
-  const job = await prisma.signJob.create({
-    data: {
-      id: jobId,
-      pengadaanId,
-      type: SignJobType.AUTO_SIGN_TBIG,
-      status: SignJobStatus.PENDING,
-      provider: provider.name,
-      externalId: result.externalId,
-      inputFileKind: FileKind.PREPARED,
-      outputFileKind: FileKind.SIGNED_TBIG,
-    },
-  });
-
-  // 4. Catat ActivityLog
-  await prisma.activityLog.create({
-    data: {
-      pengadaanId,
-      actorId,
-      action: isRetry ? "TBIG_SIGN_RETRY" : "TBIG_SIGN_SUBMITTED",
-      note: isRetry
-        ? "Pengajuan ulang tanda tangan elektronik TBIG setelah kegagalan."
-        : "Pengadaan diajukan untuk proses tanda tangan elektronik TBIG.",
-    },
-  });
-
-  return {
-    pengadaanId,
-    jobId: job.id,
-    externalId: result.externalId,
-  };
-}
-
-/**
- * Transisi T4: Job AUTO_SIGN_TBIG COMPLETED (MENUNGGU_TTD_TBIG -> MENUNGGU_PERSETUJUAN_VENDOR)
- */
-export async function completeTbigSignTransition(
-  jobId: string,
-  fileData: { storageKey: string; sizeBytes: number; sha256: string }
-) {
-  const job = await prisma.signJob.findUnique({
-    where: { id: jobId },
-    include: { pengadaan: true },
-  });
-
-  if (!job) {
-    throw new Error(`SignJob '${jobId}' tidak ditemukan.`);
-  }
-
-  if (job.status === SignJobStatus.COMPLETED) {
-    return job; // Idempoten
-  }
-
-  // Optimistic update status pengadaan
+  // Optimistic update status pengadaan DRAFT -> MENUNGGU_PERSETUJUAN_VENDOR
   const updated = await prisma.pengadaan.updateMany({
     where: {
-      id: job.pengadaanId,
-      status: PengadaanStatus.MENUNGGU_TTD_TBIG,
+      id: pengadaanId,
+      status: PengadaanStatus.DRAFT,
     },
     data: {
       status: PengadaanStatus.MENUNGGU_PERSETUJUAN_VENDOR,
-      tbigSignedAt: new Date(),
     },
   });
 
   if (updated.count === 0) {
-    console.warn(
-      `[completeTbigSignTransition] Status pengadaan '${job.pengadaanId}' bukan MENUNGGU_TTD_TBIG.`
-    );
+    throw new Error("Gagal mengajukan pengadaan: Status pengadaan telah berubah.");
   }
-
-  // Update SignJob ke COMPLETED
-  const updatedJob = await prisma.signJob.update({
-    where: { id: job.id },
-    data: {
-      status: SignJobStatus.COMPLETED,
-      completedAt: new Date(),
-    },
-  });
-
-  // Upsert DocumentFile SIGNED_TBIG
-  await prisma.documentFile.upsert({
-    where: {
-      pengadaanId_kind: {
-        pengadaanId: job.pengadaanId,
-        kind: FileKind.SIGNED_TBIG,
-      },
-    },
-    update: {
-      storageKey: fileData.storageKey,
-      sizeBytes: fileData.sizeBytes,
-      sha256: fileData.sha256,
-    },
-    create: {
-      pengadaanId: job.pengadaanId,
-      kind: FileKind.SIGNED_TBIG,
-      storageKey: fileData.storageKey,
-      sizeBytes: fileData.sizeBytes,
-      sha256: fileData.sha256,
-    },
-  });
 
   // Catat ActivityLog
   await prisma.activityLog.create({
     data: {
-      pengadaanId: job.pengadaanId,
-      actorId: null,
-      action: "TBIG_SIGNED",
-      note: "Dokumen berhasil ditandatangani oleh TBIG (Auto Sign).",
+      pengadaanId,
+      actorId,
+      action: "PENGADAAN_SUBMITTED_TO_VENDOR",
+      note: "Dokumen pengadaan diajukan ke pihak Mitra/Vendor untuk ditinjau.",
     },
   });
 
-  return updatedJob;
+  return await prisma.pengadaan.findUnique({
+    where: { id: pengadaanId },
+    include: { vendor: true, files: true, logs: true },
+  });
 }
 
 export interface SubmitVendorApprovalInput {
@@ -638,20 +484,20 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
     );
   }
 
-  const signedTbigFile = pengadaan.files.find(
-    (f) => f.kind === FileKind.SIGNED_TBIG
+  const prepFile = pengadaan.files.find(
+    (f) => f.kind === FileKind.PREPARED
   );
-  if (!signedTbigFile) {
-    throw new Error("Dokumen bertanda tangan TBIG (SIGNED_TBIG) tidak ditemukan.");
+  if (!prepFile) {
+    throw new Error("Dokumen PREPARED (Lembar Pengesahan) tidak ditemukan.");
   }
 
   const storage = getStorage();
-  const signedPdfBytes = await storage.get(signedTbigFile.storageKey);
-  if (!signedPdfBytes) {
-    throw new Error("Gagal mengunduh dokumen SIGNED_TBIG dari storage.");
+  const pdfBytes = await storage.get(prepFile.storageKey);
+  if (!pdfBytes) {
+    throw new Error("Gagal mengunduh dokumen PREPARED dari storage.");
   }
 
-  const doc = await PDFDocument.load(signedPdfBytes);
+  const doc = await PDFDocument.load(pdfBytes);
   const targetPage = doc.getPageCount();
 
   const provider = getESignProvider();
@@ -665,7 +511,7 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
   try {
     result = await provider.stampMeterai({
       jobId,
-      pdf: signedPdfBytes,
+      pdf: pdfBytes,
       filename: `pengadaan-${pengadaan.noSuratPesanan}-meterai.pdf`,
       page: targetPage,
       box: LAYOUT.vendorMeterai,
@@ -680,7 +526,7 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
         type: SignJobType.STAMP_METERAI,
         status: SignJobStatus.FAILED,
         provider: provider.name,
-        inputFileKind: FileKind.SIGNED_TBIG,
+        inputFileKind: FileKind.PREPARED,
         outputFileKind: FileKind.STAMPED_METERAI,
         errorMessage: errorMsg,
       },
@@ -716,7 +562,7 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
       status: SignJobStatus.PENDING,
       provider: provider.name,
       externalId: result.externalId,
-      inputFileKind: FileKind.SIGNED_TBIG,
+      inputFileKind: FileKind.PREPARED,
       outputFileKind: FileKind.STAMPED_METERAI,
     },
   });
@@ -822,7 +668,7 @@ export async function retryVendorSign(input: SubmitVendorApprovalInput) {
       externalId: requestResult.externalId,
       signUrl: requestResult.signUrl,
       inputFileKind: FileKind.STAMPED_METERAI,
-      outputFileKind: FileKind.FINAL,
+      outputFileKind: FileKind.SIGNED_VENDOR,
     },
   });
 
@@ -844,7 +690,7 @@ export async function retryVendorSign(input: SubmitVendorApprovalInput) {
 }
 
 /**
- * Transisi T7: Job STAMP_METERAI COMPLETED
+ * Transisi T6: Job STAMP_METERAI COMPLETED
  * Simpan STAMPED_METERAI, isi meteraiStampedAt, buat SignJob(SIGN_VENDOR)
  */
 export async function completeMeteraiTransition(
@@ -936,7 +782,7 @@ export async function completeMeteraiTransition(
   const requestResult = await provider.requestSign({
     jobId: nextJobId,
     pdf: stampedBytes,
-    filename: `pengadaan-${job.pengadaan.noSuratPesanan}-final.pdf`,
+    filename: `pengadaan-${job.pengadaan.noSuratPesanan}-vendor-signed.pdf`,
     signer: {
       name: job.pengadaan.picNama,
       email: signerEmail,
@@ -957,7 +803,7 @@ export async function completeMeteraiTransition(
       externalId: requestResult.externalId,
       signUrl: requestResult.signUrl,
       inputFileKind: FileKind.STAMPED_METERAI,
-      outputFileKind: FileKind.FINAL,
+      outputFileKind: FileKind.SIGNED_VENDOR,
     },
   });
 
@@ -965,9 +811,214 @@ export async function completeMeteraiTransition(
 }
 
 /**
- * Transisi T8: Job SIGN_VENDOR COMPLETED (MENUNGGU_TTD_VENDOR -> SELESAI)
+ * Transisi T7: Job SIGN_VENDOR COMPLETED (MENUNGGU_TTD_VENDOR -> MENUNGGU_TTD_TBIG)
  */
 export async function completeVendorSignTransition(
+  jobId: string,
+  fileData: { storageKey: string; sizeBytes: number; sha256: string }
+) {
+  const job = await prisma.signJob.findUnique({
+    where: { id: jobId },
+    include: { pengadaan: true },
+  });
+
+  if (!job) {
+    throw new Error(`SignJob '${jobId}' tidak ditemukan.`);
+  }
+
+  if (job.status === SignJobStatus.COMPLETED) {
+    return job;
+  }
+
+  // Optimistic update status pengadaan ke MENUNGGU_TTD_TBIG
+  const updated = await prisma.pengadaan.updateMany({
+    where: {
+      id: job.pengadaanId,
+      status: PengadaanStatus.MENUNGGU_TTD_VENDOR,
+    },
+    data: {
+      status: PengadaanStatus.MENUNGGU_TTD_TBIG,
+      vendorSignedAt: new Date(),
+    },
+  });
+
+  if (updated.count === 0) {
+    console.warn(
+      `[completeVendorSignTransition] Status pengadaan '${job.pengadaanId}' bukan MENUNGGU_TTD_VENDOR.`
+    );
+  }
+
+  // Update SignJob ke COMPLETED
+  const updatedJob = await prisma.signJob.update({
+    where: { id: job.id },
+    data: {
+      status: SignJobStatus.COMPLETED,
+      completedAt: new Date(),
+    },
+  });
+
+  // Upsert DocumentFile SIGNED_VENDOR
+  await prisma.documentFile.upsert({
+    where: {
+      pengadaanId_kind: {
+        pengadaanId: job.pengadaanId,
+        kind: FileKind.SIGNED_VENDOR,
+      },
+    },
+    update: {
+      storageKey: fileData.storageKey,
+      sizeBytes: fileData.sizeBytes,
+      sha256: fileData.sha256,
+    },
+    create: {
+      pengadaanId: job.pengadaanId,
+      kind: FileKind.SIGNED_VENDOR,
+      storageKey: fileData.storageKey,
+      sizeBytes: fileData.sizeBytes,
+      sha256: fileData.sha256,
+    },
+  });
+
+  // Catat ActivityLog
+  await prisma.activityLog.create({
+    data: {
+      pengadaanId: job.pengadaanId,
+      actorId: null,
+      action: "VENDOR_SIGNED",
+      note: "Dokumen pengadaan selesai ditandatangani oleh Vendor. Menunggu tanda tangan TBIG.",
+    },
+  });
+
+  // Otomatis memicu auto-sign TBIG jika didukung
+  try {
+    await submitTbigSign(job.pengadaanId, null);
+  } catch (err) {
+    console.warn("[completeVendorSignTransition] Auto-sign TBIG deferred:", err);
+  }
+
+  return updatedJob;
+}
+
+/**
+ * Transisi T8a: TBIG menandatangani pengadaan (MENUNGGU_TTD_TBIG -> AUTO_SIGN_TBIG)
+ */
+export async function submitTbigSign(
+  pengadaanId: string,
+  actorId: string | null
+) {
+  const pengadaan = await prisma.pengadaan.findUnique({
+    where: { id: pengadaanId },
+    include: {
+      files: true,
+      jobs: {
+        where: { type: SignJobType.AUTO_SIGN_TBIG },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+
+  if (!pengadaan) {
+    throw new Error("Pengadaan tidak ditemukan.");
+  }
+
+  const isWaitingTbig =
+    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG;
+  const isRetry =
+    isWaitingTbig && pengadaan.jobs[0]?.status === SignJobStatus.FAILED;
+
+  if (!isWaitingTbig) {
+    throw new Error(
+      `Pengadaan hanya dapat ditandatangani TBIG saat status MENUNGGU_TTD_TBIG (saat ini: ${pengadaan.status}).`
+    );
+  }
+
+  // Cari file SIGNED_VENDOR (atau fallback STAMPED_METERAI / PREPARED)
+  const vendorFile =
+    pengadaan.files.find((f) => f.kind === FileKind.SIGNED_VENDOR) ||
+    pengadaan.files.find((f) => f.kind === FileKind.STAMPED_METERAI) ||
+    pengadaan.files.find((f) => f.kind === FileKind.PREPARED);
+
+  if (!vendorFile) {
+    throw new Error("Dokumen dengan tanda tangan Vendor tidak ditemukan.");
+  }
+
+  const storage = getStorage();
+  const pdfBytes = await storage.get(vendorFile.storageKey);
+  if (!pdfBytes) {
+    throw new Error("Gagal mengunduh dokumen bertanda tangan Vendor dari storage.");
+  }
+
+  const doc = await PDFDocument.load(pdfBytes);
+  const targetPage = doc.getPageCount();
+
+  const provider = getESignProvider();
+  const jobId = crypto.randomUUID();
+  const baseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
+  const token = process.env.ESIGN_WEBHOOK_TOKEN || "";
+  const callbackUrl = `${baseUrl}/api/webhooks/esign?token=${token}`;
+
+  let result;
+  try {
+    result = await provider.autoSign({
+      jobId,
+      pdf: pdfBytes,
+      filename: `pengadaan-${pengadaan.noSuratPesanan}-final.pdf`,
+      page: targetPage,
+      box: LAYOUT.tbigSignature,
+      callbackUrl,
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    await prisma.signJob.create({
+      data: {
+        id: jobId,
+        pengadaanId,
+        type: SignJobType.AUTO_SIGN_TBIG,
+        status: SignJobStatus.FAILED,
+        provider: provider.name,
+        inputFileKind: vendorFile.kind,
+        outputFileKind: FileKind.FINAL,
+        errorMessage: errorMsg,
+      },
+    });
+    throw err;
+  }
+
+  const job = await prisma.signJob.create({
+    data: {
+      id: jobId,
+      pengadaanId,
+      type: SignJobType.AUTO_SIGN_TBIG,
+      status: SignJobStatus.PENDING,
+      provider: provider.name,
+      externalId: result.externalId,
+      inputFileKind: vendorFile.kind,
+      outputFileKind: FileKind.FINAL,
+    },
+  });
+
+  await prisma.activityLog.create({
+    data: {
+      pengadaanId,
+      actorId,
+      action: isRetry ? "TBIG_SIGN_RETRY" : "TBIG_SIGN_SUBMITTED",
+      note: isRetry
+        ? "Pengajuan ulang tanda tangan elektronik TBIG setelah kegagalan."
+        : "Pengadaan diajukan untuk proses tanda tangan elektronik TBIG (Auto Sign).",
+    },
+  });
+
+  return {
+    pengadaanId,
+    jobId: job.id,
+    externalId: result.externalId,
+  };
+}
+
+/**
+ * Transisi T8b: Job AUTO_SIGN_TBIG COMPLETED (MENUNGGU_TTD_TBIG -> SELESAI)
+ */
+export async function completeTbigSignTransition(
   jobId: string,
   fileData: { storageKey: string; sizeBytes: number; sha256: string }
 ) {
@@ -988,17 +1039,17 @@ export async function completeVendorSignTransition(
   const updated = await prisma.pengadaan.updateMany({
     where: {
       id: job.pengadaanId,
-      status: PengadaanStatus.MENUNGGU_TTD_VENDOR,
+      status: PengadaanStatus.MENUNGGU_TTD_TBIG,
     },
     data: {
       status: PengadaanStatus.SELESAI,
-      vendorSignedAt: new Date(),
+      tbigSignedAt: new Date(),
     },
   });
 
   if (updated.count === 0) {
     console.warn(
-      `[completeVendorSignTransition] Status pengadaan '${job.pengadaanId}' bukan MENUNGGU_TTD_VENDOR.`
+      `[completeTbigSignTransition] Status pengadaan '${job.pengadaanId}' bukan MENUNGGU_TTD_TBIG.`
     );
   }
 
@@ -1038,8 +1089,8 @@ export async function completeVendorSignTransition(
     data: {
       pengadaanId: job.pengadaanId,
       actorId: null,
-      action: "VENDOR_SIGNED",
-      note: "Dokumen pengadaan selesai ditandatangani oleh Vendor.",
+      action: "TBIG_SIGNED",
+      note: "Dokumen berhasil ditandatangani oleh TBIG (Auto Sign). Alur pengadaan selesai.",
     },
   });
 

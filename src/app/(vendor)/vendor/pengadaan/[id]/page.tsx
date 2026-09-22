@@ -48,11 +48,8 @@ export default async function VendorDetailPengadaanPage({
     notFound();
   }
 
-  // PRD 7.4: Vendor tidak boleh melihat pengadaan DRAFT atau MENUNGGU_TTD_TBIG
-  if (
-    pengadaan.status === PengadaanStatus.DRAFT ||
-    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG
-  ) {
+  // PRD 7.4: Vendor tidak boleh melihat pengadaan berstatus DRAFT
+  if (pengadaan.status === PengadaanStatus.DRAFT) {
     notFound();
   }
 
@@ -69,14 +66,19 @@ export default async function VendorDetailPengadaanPage({
     latestJob?.type === SignJobType.SIGN_VENDOR &&
     latestJob?.status === SignJobStatus.WAITING_SIGNER;
 
-  // Auto-refresh saat pembubuhan meterai sedang berlangsung
-  const isProcessing = isMeteraiPending;
+  // Auto-refresh saat proses meterai, tanda tangan, atau menunggu ttd TBIG
+  const isProcessing =
+    isMeteraiPending ||
+    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG;
 
-  // PRD 8.6: Preview PDF versi yang sudah ditandatangani TBIG atau lebih baru
+  // PRD 8.6: Preview PDF
   const vendorFilePriority: FileKind[] = [
     FileKind.FINAL,
+    FileKind.SIGNED_VENDOR,
     FileKind.STAMPED_METERAI,
     FileKind.SIGNED_TBIG,
+    FileKind.PREPARED,
+    FileKind.ORIGINAL,
   ];
 
   const activeFile = vendorFilePriority
@@ -199,6 +201,38 @@ export default async function VendorDetailPengadaanPage({
           )}
         </div>
       </div>
+
+      {/* Banner Menunggu Tanda Tangan TBIG */}
+      {pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG && (
+        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 shadow-xs">
+          <div className="flex items-start space-x-3">
+            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-sm font-bold text-blue-900">
+                Menunggu Tanda Tangan TBIG
+              </p>
+              <p className="text-sm text-blue-800 leading-relaxed">
+                Dokumen telah Anda setujui dan ditandatangani serta dibubuhi eMeterai. Saat ini sedang menunggu proses tanda tangan pihak TBIG. Halaman akan diperbarui otomatis saat proses selesai.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Banner Selesai jika SELESAI */}
       {pengadaan.status === PengadaanStatus.SELESAI && (

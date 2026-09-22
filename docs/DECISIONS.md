@@ -152,4 +152,19 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
   2. Hasil pengujian dicatat di `docs/mekari/qa.md` Poin #3 dan diverifikasi via skrip `scripts/verify-step-2-7.ts`.
 - **Konsekuensi**: Integritas kriptografis dokumen terjamin, tidak terjadi penolakan `File already has a certificate` dari engine Mekari, dan status UI pengadaan tetap konsisten bagi pengguna.
 
+### 2026-09-22 - Pengalaman Vendor Saat Tanda Tangan (Step 2.8)
+- **Konteks**: Memvalidasi pengalaman pengguna vendor saat menandatangani dokumen pengadaan (apakah didukung via direct signing URL atau berbasis email resmi Mekari Sign) serta kesiapan UI portal vendor sesuai PRD Step 2.8.
+- **Temuan Uji Sandbox**:
+  1. Pada akun Sandbox Mekari, pemanggilan API `request_global_sign` dengan parameter `signing_url: true` tidak mengembalikan direct signing URL (`signing_link: []` dan `signing_url: null`).
+  2. Pemanggilan endpoint `POST /documents/:id/generate_signing_url` mengembalikan error `403 Forbidden` (`Compliances not allowed`), menegaskan bahwa vendor menandatangani melalui link aman yang dikirimkan langsung oleh sistem Mekari ke alamat email vendor.
+  3. Dokumen pengadaan berhasil dikirimkan ke email nyata vendor (`SEED_VENDOR1_EMAIL`), di mana vendor dapat menyelesaikan tanda tangan dan verifikasi identitas (OTP/eKYC) tanpa perlu mendaftar atau login ke akun Mekari.
+- **Keputusan**:
+  1. Portal Vendor (`/vendor/pengadaan/[id]`) dikonfigurasi adaptif:
+     - Jika `signing_url` tersedia: menampilkan tombol *"Lanjutkan Tanda Tangan"*.
+     - Jika email-only: menampilkan pesan *"Silakan cek email Anda dari Mekari Sign untuk menandatangani dokumen pengadaan."* dan secara instan menampilkan tombol *"Cek status"* (`forceShow: true`) tanpa menunggu delay 1 menit.
+  2. Tombol *"Cek status"* memanggil `syncSignJobStatusAction` untuk melakukan fallback polling ke Mekari (`GET /documents/:id`) dan memperbarui status pengadaan secara reaktif.
+  3. Hasil pengujian dicatat di `docs/mekari/qa.md` Poin #2 dan diverifikasi via skrip `scripts/verify-step-2-8.ts`.
+- **Konsekuensi**: Alur tanda tangan vendor berjalan mulus sesuai rancangan PRD Step 2.8, UX vendor jelas baik pada mode email-only maupun direct link, dan pembaruan status dokumen terjamin.
+
+
 

@@ -23,8 +23,15 @@ Dokumen ini mencatat konfirmasi teknis dari tim Mekari untuk implementasi Fase 2
   - Jika ada signing URL, berapa masa berlakunya (TTL) dan apakah bisa di-regenerate jika kedaluwarsa?
   - Apakah email default dari Mekari bisa di-nonaktifkan jika kita ingin mendistribusikan link secara mandiri?
 - **Jawaban Mekari**:
-  - *Status*: Pending
-  - *Catatan*:
+  - *Status*: Terverifikasi via Pengujian Sandbox Mekari (Step 2.8)
+  - *Temuan & Keputusan Teknis*:
+    1. **Akses Dokumen Vendor Berbasis Email Resmi**:
+       - Endpoint `POST /documents/request_global_sign` dengan parameter `signing_url: true` pada Sandbox Mekari tidak mengembalikan signing URL langsung di response payload (`signing_link: []`, `signing_url: null`).
+       - Percobaan memanggil endpoint `POST /documents/:id/generate_signing_url` mengembalikan error `403 Forbidden` (`Compliances not allowed`), yang mengindikasikan fitur direct signing link dibatasi pada paket enterprise atau jenis compliance tertentu.
+       - Mekari secara otomatis mengirimkan email notifikasi resmi ke alamat email signer eksternal (vendor) yang memuat tombol/tautan aman untuk proses penandatanganan dan eKYC/OTP Mekari.
+    2. **Implementasi UI Sesuai PRD Step 2.8**:
+       - Aplikasi TBIG menampilkan instruksi: *"Silakan cek email Anda dari Mekari Sign untuk menandatangani dokumen pengadaan."* beserta tombol **"Cek status"** untuk sinkronisasi hasil setelah vendor menandatangani.
+       - Jika di masa mendatang Mekari mengembalikan `signing_url`, tombol *"Lanjutkan Tanda Tangan"* otomatis aktif membuka URL tersebut.
 
 ---
 

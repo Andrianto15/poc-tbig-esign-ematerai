@@ -168,6 +168,8 @@ export default async function VendorDetailPengadaanPage({
             <CheckStatusButton
               pengadaanId={pengadaan.id}
               jobCreatedAt={latestJob.createdAt}
+              forceShow={isWaitingSigner && !latestJob?.signUrl}
+              label={isWaitingSigner && !latestJob?.signUrl ? "Cek status" : undefined}
             />
           )}
 
@@ -302,7 +304,7 @@ export default async function VendorDetailPengadaanPage({
               <p className="text-xs text-indigo-800 mt-0.5">
                 {latestJob?.signUrl
                   ? "eMeterai berhasil dibubuhkan. Klik tombol di samping untuk melanjutkan ke proses penandatanganan elektronik."
-                  : "Silakan cek email Anda dari Mekari Sign untuk menandatangani dokumen."}
+                  : "Silakan cek email Anda dari Mekari Sign untuk menandatangani dokumen pengadaan."}
               </p>
             </div>
           </div>
@@ -311,6 +313,8 @@ export default async function VendorDetailPengadaanPage({
               <CheckStatusButton
                 pengadaanId={pengadaan.id}
                 jobCreatedAt={latestJob.createdAt}
+                forceShow={!latestJob?.signUrl}
+                label="Cek status"
               />
             )}
             {latestJob?.signUrl && (

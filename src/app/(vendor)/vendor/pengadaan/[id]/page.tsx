@@ -137,59 +137,6 @@ export default async function VendorDetailPengadaanPage({
             </>
           )}
 
-          {isWaitingSigner && (
-            <>
-              {latestJob?.signUrl ? (
-                <a
-                  href={latestJob.signUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                    />
-                  </svg>
-                  <span>Lanjutkan Tanda Tangan & Meterai</span>
-                </a>
-              ) : (
-                <VendorSignOtpDialog
-                  pengadaanId={pengadaan.id}
-                  noSuratPesanan={pengadaan.noSuratPesanan}
-                  vendorNama={pengadaan.vendor.nama}
-                  initialEmail={user.email}
-                  isMockMode={process.env.ESIGN_MODE === "mock"}
-                />
-              )}
-            </>
-          )}
-
-          {isJobFailed && latestJob && (
-            <RetryVendorButton
-              pengadaanId={pengadaan.id}
-              type={latestJob.type as "STAMP_METERAI" | "SIGN_VENDOR"}
-            />
-          )}
-
-          {(isMeteraiPending || isWaitingSigner) && latestJob && (
-            <CheckStatusButton
-              pengadaanId={pengadaan.id}
-              jobCreatedAt={latestJob.createdAt}
-              forceShow={isWaitingSigner && !latestJob?.signUrl}
-              label={isWaitingSigner && !latestJob?.signUrl ? "Cek status" : undefined}
-            />
-          )}
-
           {activeFile && (
             <a
               href={`/api/files/${activeFile.id}`}

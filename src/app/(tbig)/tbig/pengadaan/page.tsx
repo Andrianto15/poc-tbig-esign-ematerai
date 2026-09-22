@@ -2,27 +2,42 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/user";
 import { StatusBadge, STATUS_CONFIG } from "@/components/StatusBadge";
+import { Pagination } from "@/components/Pagination";
 import { formatRupiah, formatDateIndo } from "@/lib/pdf/lembar-pengesahan";
 import { PengadaanStatus } from "@/generated/prisma/enums";
+
+const PAGE_SIZE = 10;
 
 export default async function TbigPengadaanListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; page?: string }>;
 }) {
   await requireRole("TBIG");
-  const { status } = await searchParams;
+  const { status, page } = await searchParams;
 
   const statusFilter =
     status && Object.values(PengadaanStatus).includes(status as PengadaanStatus)
       ? (status as PengadaanStatus)
       : undefined;
 
-  const pengadaans = await prisma.pengadaan.findMany({
-    where: statusFilter ? { status: statusFilter } : undefined,
-    include: { vendor: true },
-    orderBy: { updatedAt: "desc" },
-  });
+  const rawPage = Number.parseInt(page ?? "1", 10);
+  const currentPage = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+
+  const where = statusFilter ? { status: statusFilter } : undefined;
+
+  const [totalItems, pengadaans] = await prisma.$transaction([
+    prisma.pengadaan.count({ where }),
+    prisma.pengadaan.findMany({
+      where,
+      include: { vendor: true },
+      orderBy: { updatedAt: "desc" },
+      skip: (currentPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
 
   return (
     <div className="space-y-6">
@@ -151,6 +166,16 @@ export default async function TbigPengadaanListPage({
               </tbody>
             </table>
           </div>
+        )}
+        {pengadaans.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={PAGE_SIZE}
+            baseUrl="/tbig/pengadaan"
+            searchParams={{ status: statusFilter }}
+          />
         )}
       </div>
     </div>

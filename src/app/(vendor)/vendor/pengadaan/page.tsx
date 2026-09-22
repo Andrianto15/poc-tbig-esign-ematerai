@@ -2,11 +2,19 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/user";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Pagination } from "@/components/Pagination";
 import { formatRupiah, formatDateIndo } from "@/lib/pdf/lembar-pengesahan";
 import { PengadaanStatus } from "@/generated/prisma/enums";
 
-export default async function VendorPengadaanPage() {
+const PAGE_SIZE = 10;
+
+export default async function VendorPengadaanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const user = await requireRole("VENDOR");
+  const { page } = await searchParams;
 
   if (!user.vendorId) {
     return (
@@ -24,18 +32,30 @@ export default async function VendorPengadaanPage() {
     );
   }
 
+  const rawPage = Number.parseInt(page ?? "1", 10);
+  const currentPage = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+
+  const where = {
+    vendorId: user.vendorId,
+    status: {
+      not: PengadaanStatus.DRAFT,
+    },
+  };
+
   // PRD 7.4 & 8.5: Vendor hanya melihat pengadaan miliknya yang sudah diajukan (status bukan DRAFT)
-  const pengadaanList = await prisma.pengadaan.findMany({
-    where: {
-      vendorId: user.vendorId,
-      status: {
-        not: PengadaanStatus.DRAFT,
+  const [totalItems, pengadaanList] = await prisma.$transaction([
+    prisma.pengadaan.count({ where }),
+    prisma.pengadaan.findMany({
+      where,
+      orderBy: {
+        updatedAt: "desc",
       },
-    },
-    orderBy: {
-      updatedAt: "desc",
-    },
-  });
+      skip: (currentPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
 
   return (
     <div className="space-y-6">
@@ -137,6 +157,15 @@ export default async function VendorPengadaanPage() {
               </tbody>
             </table>
           </div>
+          {pengadaanList.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={PAGE_SIZE}
+              baseUrl="/vendor/pengadaan"
+            />
+          )}
         </div>
       )}
     </div>

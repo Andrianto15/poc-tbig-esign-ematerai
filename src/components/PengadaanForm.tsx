@@ -243,19 +243,37 @@ export function PengadaanForm({
             <label className="block text-sm font-medium text-zinc-700 mb-1">
               Pilih Vendor <span className="text-red-500">*</span>
             </label>
-            <select
-              name="vendorId"
-              value={selectedVendorId}
-              onChange={handleVendorChange}
-              required
-              className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm text-zinc-900 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-            >
-              {vendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.nama}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                name="vendorId"
+                value={selectedVendorId}
+                onChange={handleVendorChange}
+                required
+                className="w-full appearance-none px-3 py-2 pr-10 border border-zinc-300 rounded-lg text-sm text-zinc-900 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white cursor-pointer"
+              >
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.nama}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
             {state?.fieldErrors?.vendorId && (
               <p className="text-xs text-red-600 mt-1">
                 {state.fieldErrors.vendorId[0]}

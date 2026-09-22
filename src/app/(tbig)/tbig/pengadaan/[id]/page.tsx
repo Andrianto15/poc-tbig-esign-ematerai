@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/user";
 import { deletePengadaanAction } from "@/app/(tbig)/actions";
 import { StatusBadge } from "@/components/StatusBadge";
-import { AutoRefresh } from "@/components/AutoRefresh";
 import { formatRupiah, formatDateIndo } from "@/lib/pdf/lembar-pengesahan";
 import { FileKind, PengadaanStatus, SignJobStatus } from "@/generated/prisma/enums";
 import { ActivityLogTimeline } from "@/components/ActivityLogTimeline";
@@ -65,8 +64,6 @@ export default async function DetailPengadaanPage({
 
   return (
     <div className="space-y-6">
-      {/* Auto refresh saat status sedang diproses */}
-      {isProcessing && <AutoRefresh intervalMs={3000} />}
 
       {/* Navigasi Kembali */}
       <div>
@@ -131,12 +128,6 @@ export default async function DetailPengadaanPage({
           )}
           {isJobFailed && (
             <RetryTbigSignButton pengadaanId={pengadaan.id} />
-          )}
-          {isProcessing && latestJob && (
-            <CheckStatusButton
-              pengadaanId={pengadaan.id}
-              jobCreatedAt={latestJob.createdAt}
-            />
           )}
           {activeFile && (
             <a
@@ -231,7 +222,7 @@ export default async function DetailPengadaanPage({
                   : "Sedang Dalam Proses Vendor"}
               </p>
               <p className="text-xs text-blue-700 mt-0.5">
-                Dokumen sedang diproses secara elektronik oleh penyedia tanda tangan. Halaman akan diperbarui otomatis setiap beberapa detik...
+                Dokumen sedang diproses secara elektronik oleh penyedia tanda tangan. Silakan klik tombol Cek Status untuk memperbarui status terbaru.
               </p>
             </div>
           </div>
@@ -240,12 +231,10 @@ export default async function DetailPengadaanPage({
               <CheckStatusButton
                 pengadaanId={pengadaan.id}
                 jobCreatedAt={latestJob.createdAt}
+                forceShow={true}
+                label="Cek Status"
               />
             )}
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-100/80 border border-blue-200 px-2.5 py-1 rounded-md">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-              Auto-refresh aktif
-            </span>
           </div>
         </div>
       )}

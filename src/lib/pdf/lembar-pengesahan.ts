@@ -175,7 +175,7 @@ export async function generateLembarPengesahan(
     color: rgb(0.1, 0.1, 0.1),
   });
 
-  // Gambar Kotak Penanda (Garis putus-putus tipis)
+  // Gambar Kotak Penanda (Garis putus-putus tipis tanpa teks di dalamnya agar tanda tangan/meterai bersih & valid)
   // Kotak TBIG
   const tbigPdfCoords = toPdfLibCoordinates(LAYOUT.tbigSignature, height);
   page.drawRectangle({
@@ -186,16 +186,6 @@ export async function generateLembarPengesahan(
     borderWidth: 0.75,
     borderColor: rgb(0.7, 0.7, 0.7),
     borderDashArray: [3, 3],
-  });
-
-  const tbigHint = "Kotak Tanda Tangan TBIG";
-  const tbigHintW = fontRegular.widthOfTextAtSize(tbigHint, 8);
-  page.drawText(tbigHint, {
-    x: tbigPdfCoords.x + (tbigPdfCoords.width - tbigHintW) / 2,
-    y: tbigPdfCoords.y + (tbigPdfCoords.height - 8) / 2,
-    size: 8,
-    font: fontRegular,
-    color: rgb(0.7, 0.7, 0.7),
   });
 
   // Kotak eMeterai Vendor
@@ -210,16 +200,6 @@ export async function generateLembarPengesahan(
     borderDashArray: [3, 3],
   });
 
-  const meteraiHint = "e-Meterai";
-  const meteraiHintW = fontRegular.widthOfTextAtSize(meteraiHint, 8);
-  page.drawText(meteraiHint, {
-    x: meteraiPdfCoords.x + (meteraiPdfCoords.width - meteraiHintW) / 2,
-    y: meteraiPdfCoords.y + (meteraiPdfCoords.height - 8) / 2,
-    size: 8,
-    font: fontRegular,
-    color: rgb(0.7, 0.7, 0.7),
-  });
-
   // Kotak TTD Vendor
   const vendorPdfCoords = toPdfLibCoordinates(LAYOUT.vendorSignature, height);
   page.drawRectangle({
@@ -230,16 +210,6 @@ export async function generateLembarPengesahan(
     borderWidth: 0.75,
     borderColor: rgb(0.7, 0.7, 0.7),
     borderDashArray: [3, 3],
-  });
-
-  const vendorHint = "Tanda Tangan Vendor";
-  const vendorHintW = fontRegular.widthOfTextAtSize(vendorHint, 8);
-  page.drawText(vendorHint, {
-    x: vendorPdfCoords.x + (vendorPdfCoords.width - vendorHintW) / 2,
-    y: vendorPdfCoords.y + (vendorPdfCoords.height - 8) / 2,
-    size: 8,
-    font: fontRegular,
-    color: rgb(0.7, 0.7, 0.7),
   });
 
   // Nama & Jabatan Penandatangan di bawah kotak

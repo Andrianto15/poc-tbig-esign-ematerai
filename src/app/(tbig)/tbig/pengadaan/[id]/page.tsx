@@ -10,6 +10,7 @@ import { FileKind, PengadaanStatus, SignJobStatus } from "@/generated/prisma/enu
 import { ActivityLogTimeline } from "@/components/ActivityLogTimeline";
 import { SignTbigDialog } from "./SignTbigDialog";
 import { RetryTbigSignButton } from "./RetryTbigSignButton";
+import { CheckStatusButton } from "@/components/CheckStatusButton";
 
 export default async function DetailPengadaanPage({
   params,
@@ -126,6 +127,12 @@ export default async function DetailPengadaanPage({
           {isJobFailed && (
             <RetryTbigSignButton pengadaanId={pengadaan.id} />
           )}
+          {isProcessing && latestJob && (
+            <CheckStatusButton
+              pengadaanId={pengadaan.id}
+              jobCreatedAt={latestJob.createdAt}
+            />
+          )}
           {activeFile && (
             <a
               href={`/api/files/${activeFile.id}`}
@@ -208,10 +215,18 @@ export default async function DetailPengadaanPage({
               </p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-100/80 border border-blue-200 px-2.5 py-1 rounded-md">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-            Auto-refresh aktif
-          </span>
+          <div className="flex items-center gap-3">
+            {latestJob && (
+              <CheckStatusButton
+                pengadaanId={pengadaan.id}
+                jobCreatedAt={latestJob.createdAt}
+              />
+            )}
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-100/80 border border-blue-200 px-2.5 py-1 rounded-md">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+              Auto-refresh aktif
+            </span>
+          </div>
         </div>
       )}
 

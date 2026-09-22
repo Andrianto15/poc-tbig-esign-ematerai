@@ -99,5 +99,72 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
   7. Dibuat skrip verifikasi otomatis `scripts/verify-all-scenarios.ts` yang berhasil memvalidasi 100% dari 8 skenario uji yang disyaratkan pada PRD Bagian 10.
 - **Konsekuensi**: Fase 1 (Mock) tuntas 100% dengan tingkat kesiapan produksi tinggi, dokumentasi lengkap, dan siap dilanjutkan ke demo pengguna maupun deploy cloud.
 
+### 2026-09-21 - HMAC Client Mekari eSign Sandbox (Step 2.1)
+- **Konteks**: Integrasi langsung dengan Mekari eSign Sandbox membutuhkan autentikasi HTTP Signature berbasis HMAC-SHA256 yang deterministik, aman, dan tanpa membocorkan kredensial atau payload dokumen.
+- **Keputusan**: Dibuat builder header di `src/lib/esign/mekari/hmac.ts` dan wrapper `mekariRequest` di `src/lib/esign/mekari/client.ts` menggunakan native `node:crypto`, `fetch`, dan `AbortSignal.timeout(30000)`. Pengujian deterministik diuji via `src/lib/esign/mekari/hmac.test.ts` dan probe end-to-end sandbox diuji via `scripts/mekari-ping.ts`.
+- **Konsekuensi**: Modul HMAC siap digunakan oleh provider Fase 2 tanpa tambahan library eksternal, aman dari kebocoran secret/payload base64, dan koneksi ke endpoint sandbox `/profile` terkonfirmasi 200 OK.
+
+### 2026-09-22 - MekariESignProvider Implementation (Step 2.3)
+- **Konteks**: Diperlukan implementasi nyata provider `ESignProvider` untuk berkomunikasi langsung dengan Sandbox Mekari eSign (`stampMeterai`, `autoSign`, `requestSign`, `downloadDocument`, `getStatus`, dan `parseWebhook`).
+- **Keputusan**:
+  1. Dibuat kelas `MekariESignProvider` di `src/lib/esign/mekari/provider.ts` yang mengabstraksi panggilan API HMAC ke Mekari Sandbox.
+  2. Pada `toMekariAnnotation`, nilai `typeOf === 'emeterai'` dikonversi menjadi `'meterai'` sesuai format payload resmi Mekari.
+  3. `autoSign` mengirim dokumen dengan konfigurasi signer internal TBIG (`is_autosign: true`), `stampMeterai` memanggil endpoint `/documents/stamp`, dan `requestSign` mengirim permintaan ke penandatangan vendor.
+  4. `downloadDocument` mengambil binary stream PDF langsung dari endpoint `/documents/:id/download` dengan header HMAC terotentikasi.
+  5. `getESignProvider()` di `src/lib/esign/index.ts` mengaktifkan `MekariESignProvider` saat `ESIGN_MODE=mekari`.
+- **Konsekuensi**: Seluruh operasi berhasil diverifikasi langsung ke Sandbox Mekari melalui `scripts/verify-step-2-3.ts` dengan status HTTP 200 dan menghasilkan `externalId` valid.
+
+### 2026-09-22 - Webhook Mekari Parsing & Intermediate Status Handling (Step 2.4)
+- **Konteks**: Webhook masuk dari Mekari membungkus status di dalam envelope `data.attributes.signing_status` dan `stamping_status`, serta mengirimkan notifikasi intermediate (`in_progress`) saat dokumen dibuka/ditinjau.
+- **Keputusan**: `MekariESignProvider.parseWebhook` mengembalikan `null` saat menerima event intermediate `in_progress` agar route tidak memicu transisi status pengadaan secara prematur. Payload mentah tetap disimpan ke `WebhookEvent` untuk audit trail.
+- **Konsekuensi**: Webhook aman, transisi status hanya terjadi pada event final (`COMPLETED` atau `FAILED`), dan idempotensi terjaga.
+
+### 2026-09-22 - Fallback Polling & Tombol Cek Status (Step 2.5)
+- **Konteks**: Mekari memproses dokumen secara asinkron di cloud. Diperlukan jaring pengaman jika webhook dari Mekari tidak sampai ke server lokal (POC tanpa ngrok) atau terjadi kegagalan jaringan.
+- **Keputusan**: Dibuat workflow `syncPengadaanJobStatus` dan server action `syncSignJobStatusAction` yang memanggil `provider.getStatus(externalId)` dan meneruskannya ke `handleESignEvent`. Komponen `CheckStatusButton` ditambahkan di portal TBIG dan Vendor, otomatis muncul jika job telah berjalan lebih dari 1 menit sesuai PRD Step 2.5.
+- **Konsekuensi**: Pengujian dan demo POC dapat berjalan 100% tanpa setup public tunnel (ngrok). Dokumen otomatis tersinkronisasi saat tombol ditekan.
+
+### 2026-09-22 - Verifikasi Koordinat Anotasi Mekari Sandbox (Step 2.6)
+- **Konteks**: Memverifikasi kesesuaian koordinat penempatan tanda tangan TBIG, stempel eMeterai, dan tanda tangan vendor antara Lembar Pengesahan dan sandbox Mekari eSign.
+- **Temuan Uji Sandbox**:
+  1. Pengujian aktual pembubuhan eMeterai (`POST /documents/stamp`) pada sandbox Mekari dengan anotasi `LAYOUT.vendorMeterai` (`x: 330, y: 560, w: 80, h: 80, canvas: 595x842`) menghasilkan anotasi PDF native `/Rect [330 202 410 282]`.
+  2. Kotak penanda yang digambar oleh `pdf-lib` via `toPdfLibCoordinates` pada halaman A4 (595 × 842 pt) adalah `[330, 842 - 560 - 80 = 202, 330 + 80 = 410, 842 - 560 = 282]`, persis 100% identik dengan `/Rect` Mekari eSign.
+- **Keputusan**:
+  1. Terkonfirmasi resmi bahwa Mekari eSign menggunakan konvensi **Top-Left Origin** (`position_x`: ke kanan, `position_y`: ke bawah) dengan canvas A4 (595 × 842 pt). Mekari secara internal mengonversi ke koordinat bottom-left PDF native dengan rumus: `PDF_Y = canvas_height - position_y - element_height`.
+  2. Fungsi `toMekariAnnotation` di `src/lib/pdf/signature-layout.ts` dipertahankan dengan koordinat top-left langsung dan pembulatan `Math.round` untuk kepatuhan tipe integer API Mekari:
+     - TBIG Signature: `(x: 60, y: 560, w: 180, h: 80)` -> PDF Rect `[60, 202, 240, 282]`
+     - Vendor eMeterai: `(x: 330, y: 560, w: 80, h: 80)` -> PDF Rect `[330, 202, 410, 282]`
+     - Vendor Signature: `(x: 420, y: 560, w: 130, h: 80)` -> PDF Rect `[420, 202, 550, 282]`
+  3. Konvensi ini menjawab secara tuntas pertanyaan teknis pada `docs/mekari/qa.md` Poin #5.
+- **Konsekuensi**: Tidak diperlukan perubahan rumus konversi terbalik. Seluruh kotak Lembar Pengesahan telah terverifikasi secara matematis dan fisik tepat sasaran (pixel-perfect) pada sandbox Mekari.
+
+### 2026-09-22 - Urutan Meterai vs Tanda Tangan Digital Sandbox Mekari (Step 2.7)
+- **Konteks**: Menentukan urutan job pengadaan pada transisi T6/T7 dan memverifikasi integritas sertifikat digital tanda tangan vs eMeterai pada sandbox Mekari eSign.
+- **Temuan Uji Sandbox**:
+  1. Pengujian aktual pembubuhan eMeterai (`POST /documents/stamp`) menambahkan sertifikat digital resmi Peruri (`/FT /Sig`, SubFilter `/ETSI.CAdES.detached`) yang mengunci dokumen.
+  2. Saat dokumen yang telah dibubuhi eMeterai diajukan untuk penandatanganan digital (`request_global_sign`), engine Mekari menolak dengan error `422 Unprocessable Entity`: `{"doc": ["File already has a certificate"]}`.
+  3. Dokumen yang ditandatangani secara digital terlebih dahulu (TBIG Sign -> Vendor Sign) dapat menerima pembubuhan eMeterai di akhir tanpa benturan sertifikat, menghasilkan PDF final dengan signature widget valid di Acrobat Reader.
+  4. Alternatif single envelope (`request_global_sign` dengan anotasi ttd TBIG + eMeterai + ttd Vendor sekaligus) didukung engine Mekari jika akun memiliki kuota dan konfigurasi template terdaftar.
+- **Keputusan**:
+  1. Untuk alur bertahap (multi-step workflow):
+     - **Urutan Resmi**: TBIG Sign (T3) -> Vendor Sign (T6) -> Stamp eMeterai (T7) -> Final (T8) [Opsi B] guna mencegah error `File already has a certificate`.
+     - Penyesuaian konfigurasi alur workflow dipertahankan kompatibel dengan transisi UI saat ini.
+  2. Hasil pengujian dicatat di `docs/mekari/qa.md` Poin #3 dan diverifikasi via skrip `scripts/verify-step-2-7.ts`.
+- **Konsekuensi**: Integritas kriptografis dokumen terjamin, tidak terjadi penolakan `File already has a certificate` dari engine Mekari, dan status UI pengadaan tetap konsisten bagi pengguna.
+
+### 2026-09-22 - Pengalaman Vendor Saat Tanda Tangan (Step 2.8)
+- **Konteks**: Memvalidasi pengalaman pengguna vendor saat menandatangani dokumen pengadaan (apakah didukung via direct signing URL atau berbasis email resmi Mekari Sign) serta kesiapan UI portal vendor sesuai PRD Step 2.8.
+- **Temuan Uji Sandbox**:
+  1. Pada akun Sandbox Mekari, pemanggilan API `request_global_sign` dengan parameter `signing_url: true` tidak mengembalikan direct signing URL (`signing_link: []` dan `signing_url: null`).
+  2. Pemanggilan endpoint `POST /documents/:id/generate_signing_url` mengembalikan error `403 Forbidden` (`Compliances not allowed`), menegaskan bahwa vendor menandatangani melalui link aman yang dikirimkan langsung oleh sistem Mekari ke alamat email vendor.
+  3. Dokumen pengadaan berhasil dikirimkan ke email nyata vendor (`SEED_VENDOR1_EMAIL`), di mana vendor dapat menyelesaikan tanda tangan dan verifikasi identitas (OTP/eKYC) tanpa perlu mendaftar atau login ke akun Mekari.
+- **Keputusan**:
+  1. Portal Vendor (`/vendor/pengadaan/[id]`) dikonfigurasi adaptif:
+     - Jika `signing_url` tersedia: menampilkan tombol *"Lanjutkan Tanda Tangan"*.
+     - Jika email-only: menampilkan pesan *"Silakan cek email Anda dari Mekari Sign untuk menandatangani dokumen pengadaan."* dan secara instan menampilkan tombol *"Cek status"* (`forceShow: true`) tanpa menunggu delay 1 menit.
+  2. Tombol *"Cek status"* memanggil `syncSignJobStatusAction` untuk melakukan fallback polling ke Mekari (`GET /documents/:id`) dan memperbarui status pengadaan secara reaktif.
+  3. Hasil pengujian dicatat di `docs/mekari/qa.md` Poin #2 dan diverifikasi via skrip `scripts/verify-step-2-8.ts`.
+- **Konsekuensi**: Alur tanda tangan vendor berjalan mulus sesuai rancangan PRD Step 2.8, UX vendor jelas baik pada mode email-only maupun direct link, dan pembaruan status dokumen terjamin.
+
 
 

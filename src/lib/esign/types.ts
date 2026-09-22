@@ -55,6 +55,6 @@ export interface ESignProvider {
   stampMeterai(input: StampMeteraiInput): Promise<SubmitResult>;
   requestSign(input: RequestSignInput): Promise<SubmitResult>;
   downloadDocument(externalId: string): Promise<Uint8Array>;
-  parseWebhook(req: Request): Promise<ESignEvent>; // termasuk verifikasi keaslian
+  parseWebhook(req: Request): Promise<ESignEvent | null>; // termasuk verifikasi keaslian
   getStatus?(externalId: string): Promise<ESignEvent | null>; // fallback polling
 }

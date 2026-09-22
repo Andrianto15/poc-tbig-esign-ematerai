@@ -40,13 +40,13 @@ export function toMekariAnnotation(
   typeOf: "signature" | "emeterai"
 ) {
   return {
-    page: pageNumber,
-    position_x: box.x,
-    position_y: box.y,
-    element_width: box.width,
-    element_height: box.height,
-    canvas_width: PAGE.width,
-    canvas_height: PAGE.height,
-    type_of: typeOf,
+    page: Math.round(pageNumber),
+    position_x: Math.round(box.x),
+    position_y: Math.round(box.y),
+    element_width: Math.round(box.width),
+    element_height: Math.round(box.height),
+    canvas_width: Math.round(PAGE.width),
+    canvas_height: Math.round(PAGE.height),
+    type_of: typeOf === "emeterai" ? "meterai" : typeOf,
   };
 }

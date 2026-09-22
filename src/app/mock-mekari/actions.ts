@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getStorage } from "@/lib/storage";
 import { buildMockStorageKey } from "@/lib/storage/types";
-import { applySimulatedSignature } from "@/lib/pdf/stamp-simulation";
+import {
+  applySimulatedSignature,
+  applySimulatedMeterai,
+} from "@/lib/pdf/stamp-simulation";
 import { LAYOUT } from "@/lib/pdf/signature-layout";
 import { PDFDocument } from "pdf-lib";
 import { handleESignEvent } from "@/lib/workflow/handle-esign-event";
@@ -59,16 +62,29 @@ export async function submitMockSignAction(
     };
   }
 
-  // 1. Gambar tanda tangan simulasi vendor pada PDF
+  // 1. Gambar tanda tangan simulasi TBIG, meterai, dan vendor pada PDF (Arsitektur 2 Multi-Signer)
   const doc = await PDFDocument.load(pdfBytes);
   const targetPage = doc.getPageCount();
-  const signerName = job.pengadaan.picNama || "PIC Vendor";
+  const vendorName = job.pengadaan.picNama || "PIC Vendor";
 
-  const signedPdfBytes = await applySimulatedSignature(
+  let updatedPdf = await applySimulatedSignature(
     pdfBytes,
     targetPage,
+    LAYOUT.tbigSignature,
+    "Admin Pengadaan TBIG"
+  );
+
+  updatedPdf = await applySimulatedMeterai(
+    updatedPdf,
+    targetPage,
+    LAYOUT.vendorMeterai
+  );
+
+  const signedPdfBytes = await applySimulatedSignature(
+    updatedPdf,
+    targetPage,
     LAYOUT.vendorSignature,
-    signerName
+    vendorName
   );
 
   // 2. Simpan kembali PDF bertanda tangan di mock storage dengan key externalId

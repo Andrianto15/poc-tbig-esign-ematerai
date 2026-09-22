@@ -138,13 +138,40 @@ export default async function VendorDetailPengadaanPage({
           )}
 
           {isWaitingSigner && (
-            <VendorSignOtpDialog
-              pengadaanId={pengadaan.id}
-              noSuratPesanan={pengadaan.noSuratPesanan}
-              vendorNama={pengadaan.vendor.nama}
-              initialEmail={user.email}
-              isMockMode={process.env.ESIGN_MODE === "mock"}
-            />
+            <>
+              {latestJob?.signUrl ? (
+                <a
+                  href={latestJob.signUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                    />
+                  </svg>
+                  <span>Lanjutkan Tanda Tangan & Meterai</span>
+                </a>
+              ) : (
+                <VendorSignOtpDialog
+                  pengadaanId={pengadaan.id}
+                  noSuratPesanan={pengadaan.noSuratPesanan}
+                  vendorNama={pengadaan.vendor.nama}
+                  initialEmail={user.email}
+                  isMockMode={process.env.ESIGN_MODE === "mock"}
+                />
+              )}
+            </>
           )}
 
           {isJobFailed && latestJob && (
@@ -321,10 +348,12 @@ export default async function VendorDetailPengadaanPage({
             </div>
             <div>
               <p className="text-sm font-bold text-indigo-950">
-                Dokumen Siap Ditandatangani (Verifikasi OTP In-App)
+                Dokumen Siap Ditandatangani & Dibubuhi eMeterai
               </p>
               <p className="text-xs text-indigo-800 mt-0.5">
-                eMeterai resmi (kuota Vendor) telah disiapkan. Klik tombol di samping untuk memverifikasi OTP dan menandatangani dokumen langsung di sini.
+                {latestJob?.signUrl
+                  ? "eMeterai resmi (kuota Vendor) telah disiapkan. Klik tombol di samping untuk menandatangani dokumen dan memvalidasi OTP di Mekari Sign."
+                  : "eMeterai resmi (kuota Vendor) telah disiapkan. Silakan verifikasi OTP untuk menyelesaikan tanda tangan."}
               </p>
             </div>
           </div>
@@ -336,13 +365,38 @@ export default async function VendorDetailPengadaanPage({
                 label="Cek status"
               />
             )}
-            <VendorSignOtpDialog
-              pengadaanId={pengadaan.id}
-              noSuratPesanan={pengadaan.noSuratPesanan}
-              vendorNama={pengadaan.vendor.nama}
-              initialEmail={user.email}
-              isMockMode={process.env.ESIGN_MODE === "mock"}
-            />
+            {latestJob?.signUrl ? (
+              <a
+                href={latestJob.signUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs shrink-0 flex items-center space-x-1.5"
+              >
+                <span>Lanjutkan Tanda Tangan</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M14 5l7 7m0 0l-7 7m7-7H3"
+                  />
+                </svg>
+              </a>
+            ) : (
+              <VendorSignOtpDialog
+                pengadaanId={pengadaan.id}
+                noSuratPesanan={pengadaan.noSuratPesanan}
+                vendorNama={pengadaan.vendor.nama}
+                initialEmail={user.email}
+                isMockMode={process.env.ESIGN_MODE === "mock"}
+              />
+            )}
           </div>
         </div>
       )}

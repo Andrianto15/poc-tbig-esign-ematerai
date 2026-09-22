@@ -451,13 +451,17 @@ export interface SubmitVendorApprovalInput {
 
 /**
  * Transisi T6: Vendor menyetujui pengadaan (MENUNGGU_PERSETUJUAN_VENDOR -> MENUNGGU_TTD_VENDOR)
- * Memicu job STAMP_METERAI pada dokumen SIGNED_TBIG.
- * Juga menangani retry jika job STAMP_METERAI sebelumnya FAILED pada status MENUNGGU_TTD_VENDOR.
+ * Pada Arsitektur 2 (Single Multi-Signer Envelope):
+ * Mengirim dokumen PREPARED ke provider requestSign dengan Multi-Signer:
+ * - TBIG: auto-sign
+ * - Vendor: tanda tangan OTP & eMeterai (beban Vendor)
+ * Juga menangani retry jika job SIGN_VENDOR sebelumnya FAILED pada status MENUNGGU_TTD_VENDOR.
  */
 export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
   const pengadaan = await prisma.pengadaan.findUnique({
     where: { id: input.pengadaanId },
     include: {
+      vendor: { include: { users: true } },
       files: true,
       jobs: { orderBy: { createdAt: "desc" } },
     },
@@ -473,14 +477,14 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
 
   const isInitialApproval =
     pengadaan.status === PengadaanStatus.MENUNGGU_PERSETUJUAN_VENDOR;
-  const isRetryMeterai =
+  const isRetrySign =
     pengadaan.status === PengadaanStatus.MENUNGGU_TTD_VENDOR &&
-    pengadaan.jobs[0]?.type === SignJobType.STAMP_METERAI &&
+    pengadaan.jobs[0]?.type === SignJobType.SIGN_VENDOR &&
     pengadaan.jobs[0]?.status === SignJobStatus.FAILED;
 
-  if (!isInitialApproval && !isRetryMeterai) {
+  if (!isInitialApproval && !isRetrySign) {
     throw new Error(
-      `Persetujuan vendor hanya dapat diajukan saat status MENUNGGU_PERSETUJUAN_VENDOR atau saat job eMeterai gagal (saat ini: ${pengadaan.status}).`
+      `Persetujuan vendor hanya dapat diajukan saat status MENUNGGU_PERSETUJUAN_VENDOR atau saat job tanda tangan gagal (saat ini: ${pengadaan.status}).`
     );
   }
 
@@ -505,17 +509,26 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
   const baseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
   const token = process.env.ESIGN_WEBHOOK_TOKEN || "";
   const callbackUrl = `${baseUrl}/api/webhooks/esign?token=${token}`;
+  const returnUrl = `${baseUrl}/vendor/pengadaan/${pengadaan.id}`;
 
-  // 1. Panggil provider stampMeterai
+  const vendorUser = pengadaan.vendor.users[0];
+  const signerEmail = vendorUser?.email || "vendor@poc.local";
+
+  // 1. Panggil provider requestSign (Single Multi-Signer Envelope)
   let result;
   try {
-    result = await provider.stampMeterai({
+    result = await provider.requestSign({
       jobId,
       pdf: pdfBytes,
-      filename: `pengadaan-${pengadaan.noSuratPesanan}-meterai.pdf`,
+      filename: `pengadaan-${pengadaan.noSuratPesanan}-final.pdf`,
+      signer: {
+        name: pengadaan.picNama,
+        email: signerEmail,
+      },
       page: targetPage,
-      box: LAYOUT.vendorMeterai,
+      box: LAYOUT.vendorSignature,
       callbackUrl,
+      returnUrl,
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -523,11 +536,11 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
       data: {
         id: jobId,
         pengadaanId: input.pengadaanId,
-        type: SignJobType.STAMP_METERAI,
+        type: SignJobType.SIGN_VENDOR,
         status: SignJobStatus.FAILED,
         provider: provider.name,
         inputFileKind: FileKind.PREPARED,
-        outputFileKind: FileKind.STAMPED_METERAI,
+        outputFileKind: FileKind.FINAL,
         errorMessage: errorMsg,
       },
     });
@@ -553,17 +566,19 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
     }
   }
 
-  // 3. Simpan SignJob baru status PENDING
+  // 3. Simpan SignJob baru status WAITING_SIGNER
   const job = await prisma.signJob.create({
     data: {
       id: jobId,
       pengadaanId: input.pengadaanId,
-      type: SignJobType.STAMP_METERAI,
-      status: SignJobStatus.PENDING,
+      type: SignJobType.SIGN_VENDOR,
+      status: SignJobStatus.WAITING_SIGNER,
       provider: provider.name,
       externalId: result.externalId,
+      signerId: result.signerId,
+      signUrl: result.signUrl,
       inputFileKind: FileKind.PREPARED,
-      outputFileKind: FileKind.STAMPED_METERAI,
+      outputFileKind: FileKind.FINAL,
     },
   });
 
@@ -572,10 +587,10 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
     data: {
       pengadaanId: input.pengadaanId,
       actorId: input.actorId,
-      action: isRetryMeterai ? "METERAI_STAMP_RETRY" : "VENDOR_APPROVED",
-      note: isRetryMeterai
-        ? "Pengajuan ulang pembubuhan eMeterai setelah kegagalan."
-        : "Pengadaan disetujui oleh Vendor. Memulai proses pembubuhan eMeterai.",
+      action: isRetrySign ? "VENDOR_SIGN_RETRY" : "VENDOR_APPROVED",
+      note: isRetrySign
+        ? "Pengajuan ulang permintaan tanda tangan vendor dan pembubuhan eMeterai setelah kegagalan."
+        : "Pengadaan disetujui oleh Vendor. Memulai proses tanda tangan dan pembubuhan eMeterai (beban Vendor).",
     },
   });
 
@@ -583,6 +598,7 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
     pengadaanId: input.pengadaanId,
     jobId: job.id,
     externalId: result.externalId,
+    signUrl: result.signUrl,
   };
 }
 
@@ -618,20 +634,20 @@ export async function retryVendorSign(input: SubmitVendorApprovalInput) {
     );
   }
 
-  const stampedFile = pengadaan.files.find(
-    (f) => f.kind === FileKind.STAMPED_METERAI
+  const prepFile = pengadaan.files.find(
+    (f) => f.kind === FileKind.PREPARED
   );
-  if (!stampedFile) {
-    throw new Error("Dokumen dengan eMeterai (STAMPED_METERAI) tidak ditemukan.");
+  if (!prepFile) {
+    throw new Error("Dokumen PREPARED (Lembar Pengesahan) tidak ditemukan.");
   }
 
   const storage = getStorage();
-  const stampedBytes = await storage.get(stampedFile.storageKey);
-  if (!stampedBytes) {
-    throw new Error("Gagal mengunduh dokumen STAMPED_METERAI dari storage.");
+  const prepBytes = await storage.get(prepFile.storageKey);
+  if (!prepBytes) {
+    throw new Error("Gagal mengunduh dokumen PREPARED dari storage.");
   }
 
-  const doc = await PDFDocument.load(stampedBytes);
+  const doc = await PDFDocument.load(prepBytes);
   const targetPage = doc.getPageCount();
 
   const provider = getESignProvider();
@@ -646,7 +662,7 @@ export async function retryVendorSign(input: SubmitVendorApprovalInput) {
 
   const requestResult = await provider.requestSign({
     jobId: nextJobId,
-    pdf: stampedBytes,
+    pdf: prepBytes,
     filename: `pengadaan-${pengadaan.noSuratPesanan}-final.pdf`,
     signer: {
       name: pengadaan.picNama,
@@ -668,8 +684,8 @@ export async function retryVendorSign(input: SubmitVendorApprovalInput) {
       externalId: requestResult.externalId,
       signerId: requestResult.signerId,
       signUrl: requestResult.signUrl,
-      inputFileKind: FileKind.STAMPED_METERAI,
-      outputFileKind: FileKind.SIGNED_VENDOR,
+      inputFileKind: FileKind.PREPARED,
+      outputFileKind: FileKind.FINAL,
     },
   });
 
@@ -678,7 +694,7 @@ export async function retryVendorSign(input: SubmitVendorApprovalInput) {
       pengadaanId: pengadaan.id,
       actorId: input.actorId,
       action: "VENDOR_SIGN_RETRY",
-      note: "Pengajuan ulang permintaan tanda tangan vendor setelah kegagalan.",
+      note: "Pengajuan ulang permintaan tanda tangan vendor dan eMeterai setelah kegagalan.",
     },
   });
 
@@ -691,8 +707,8 @@ export async function retryVendorSign(input: SubmitVendorApprovalInput) {
 }
 
 /**
- * Transisi T6: Job STAMP_METERAI COMPLETED
- * Simpan STAMPED_METERAI, isi meteraiStampedAt, buat SignJob(SIGN_VENDOR)
+ * Transisi T6 (Legacy Fallback): Job STAMP_METERAI COMPLETED
+ * Menyimpan STAMPED_METERAI dan mencatat log
  */
 export async function completeMeteraiTransition(
   jobId: string,
@@ -760,60 +776,15 @@ export async function completeMeteraiTransition(
     },
   });
 
-  // 5. Buat SignJob(SIGN_VENDOR) dari STAMPED_METERAI
-  const storage = getStorage();
-  const stampedBytes = await storage.get(fileData.storageKey);
-  if (!stampedBytes) {
-    throw new Error("Gagal mengambil file STAMPED_METERAI dari storage.");
-  }
-
-  const doc = await PDFDocument.load(stampedBytes);
-  const targetPage = doc.getPageCount();
-
-  const provider = getESignProvider();
-  const nextJobId = crypto.randomUUID();
-  const baseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
-  const token = process.env.ESIGN_WEBHOOK_TOKEN || "";
-  const callbackUrl = `${baseUrl}/api/webhooks/esign?token=${token}`;
-  const returnUrl = `${baseUrl}/vendor/pengadaan/${job.pengadaanId}`;
-
-  const vendorUser = job.pengadaan.vendor.users[0];
-  const signerEmail = vendorUser?.email || "vendor@poc.local";
-
-  const requestResult = await provider.requestSign({
-    jobId: nextJobId,
-    pdf: stampedBytes,
-    filename: `pengadaan-${job.pengadaan.noSuratPesanan}-vendor-signed.pdf`,
-    signer: {
-      name: job.pengadaan.picNama,
-      email: signerEmail,
-    },
-    page: targetPage,
-    box: LAYOUT.vendorSignature,
-    callbackUrl,
-    returnUrl,
-  });
-
-  await prisma.signJob.create({
-    data: {
-      id: nextJobId,
-      pengadaanId: job.pengadaanId,
-      type: SignJobType.SIGN_VENDOR,
-      status: SignJobStatus.WAITING_SIGNER,
-      provider: provider.name,
-      externalId: requestResult.externalId,
-      signerId: requestResult.signerId,
-      signUrl: requestResult.signUrl,
-      inputFileKind: FileKind.STAMPED_METERAI,
-      outputFileKind: FileKind.SIGNED_VENDOR,
-    },
-  });
-
   return updatedJob;
 }
 
+
 /**
- * Transisi T7: Job SIGN_VENDOR COMPLETED (MENUNGGU_TTD_VENDOR -> MENUNGGU_TTD_TBIG)
+ * Transisi T7: Job SIGN_VENDOR COMPLETED (MENUNGGU_TTD_VENDOR -> SELESAI)
+ * Pada Arsitektur 2 (Single Multi-Signer Envelope):
+ * Vendor ttd + eMeterai dan TBIG auto-sign selesai bersamaan dalam satu envelope.
+ * Dokumen langsung berstatus FINAL dan status pengadaan maju ke SELESAI.
  */
 export async function completeVendorSignTransition(
   jobId: string,
@@ -832,15 +803,19 @@ export async function completeVendorSignTransition(
     return job;
   }
 
-  // Optimistic update status pengadaan ke MENUNGGU_TTD_TBIG
+  const now = new Date();
+
+  // Optimistic update status pengadaan langsung ke SELESAI
   const updated = await prisma.pengadaan.updateMany({
     where: {
       id: job.pengadaanId,
       status: PengadaanStatus.MENUNGGU_TTD_VENDOR,
     },
     data: {
-      status: PengadaanStatus.MENUNGGU_TTD_TBIG,
-      vendorSignedAt: new Date(),
+      status: PengadaanStatus.SELESAI,
+      vendorSignedAt: now,
+      tbigSignedAt: now,
+      meteraiStampedAt: now,
     },
   });
 
@@ -855,11 +830,11 @@ export async function completeVendorSignTransition(
     where: { id: job.id },
     data: {
       status: SignJobStatus.COMPLETED,
-      completedAt: new Date(),
+      completedAt: now,
     },
   });
 
-  // Upsert DocumentFile SIGNED_VENDOR
+  // Upsert DocumentFile SIGNED_VENDOR dan FINAL
   await prisma.documentFile.upsert({
     where: {
       pengadaanId_kind: {
@@ -881,22 +856,36 @@ export async function completeVendorSignTransition(
     },
   });
 
+  await prisma.documentFile.upsert({
+    where: {
+      pengadaanId_kind: {
+        pengadaanId: job.pengadaanId,
+        kind: FileKind.FINAL,
+      },
+    },
+    update: {
+      storageKey: fileData.storageKey,
+      sizeBytes: fileData.sizeBytes,
+      sha256: fileData.sha256,
+    },
+    create: {
+      pengadaanId: job.pengadaanId,
+      kind: FileKind.FINAL,
+      storageKey: fileData.storageKey,
+      sizeBytes: fileData.sizeBytes,
+      sha256: fileData.sha256,
+    },
+  });
+
   // Catat ActivityLog
   await prisma.activityLog.create({
     data: {
       pengadaanId: job.pengadaanId,
       actorId: null,
       action: "VENDOR_SIGNED",
-      note: "Dokumen pengadaan selesai ditandatangani oleh Vendor via OTP in-app. Kuota eMeterai resmi dibebankan ke akun Vendor.",
+      note: "Dokumen pengadaan selesai ditandatangani oleh Vendor dan TBIG (Auto Sign). eMeterai resmi berhasil dibubuhkan (kuota dibebankan ke akun Vendor). Alur pengadaan selesai.",
     },
   });
-
-  // Otomatis memicu auto-sign TBIG jika didukung
-  try {
-    await submitTbigSign(job.pengadaanId, null);
-  } catch (err) {
-    console.warn("[completeVendorSignTransition] Auto-sign TBIG deferred:", err);
-  }
 
   return updatedJob;
 }

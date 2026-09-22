@@ -102,10 +102,14 @@ export class MekariESignProvider implements ESignProvider {
   }
 
   /**
-   * Mengirim permintaan tanda tangan ke signer eksternal (Vendor) via Mekari V2
-   * dengan proteksi OTP email dan pembebanan kuota eMeterai ke vendor
+   * Mengirim permintaan tanda tangan multi-signer (Vendor + eMeterai beban Vendor, dan TBIG auto-sign)
+   * menggunakan endpoint v1 agar auto-sign TBIG langsung dieksekusi server-side
    */
   async requestSign(input: RequestSignInput): Promise<SubmitResult> {
+    const tbigSignerEmail =
+      process.env.MEKARI_TBIG_SIGNER_EMAIL || "devtujuhsembilan@gmail.com";
+    const tbigAnnotation = toMekariAnnotation(LAYOUT.tbigSignature, input.page, "signature");
+
     const base64Doc = Buffer.from(input.pdf).toString("base64");
     const sigAnnotation = toMekariAnnotation(input.box, input.page, "signature");
     const meteraiAnnotation = {
@@ -117,6 +121,12 @@ export class MekariESignProvider implements ESignProvider {
       doc: base64Doc,
       filename: input.filename,
       signers: [
+        {
+          name: "Tower Bersama Group",
+          email: tbigSignerEmail,
+          is_autosign: true,
+          annotations: [tbigAnnotation],
+        },
         {
           name: input.signer.name,
           email: input.signer.email,
@@ -132,16 +142,23 @@ export class MekariESignProvider implements ESignProvider {
     const res = await mekariRequest<MekariDocumentResponse>(
       "POST",
       "/documents/request_global_sign",
-      payload,
-      { pathPrefix: "/v2/esign-hmac/v2" }
+      payload
     );
 
     const signUrl =
+      res.data.attributes?.signing_link?.find(
+        (l) => l.recipient_email?.toLowerCase() === input.signer.email.toLowerCase()
+      )?.signing_link ||
       res.data.attributes?.signing_link?.[0]?.signing_link ||
-      res.data.attributes?.signers?.[0]?.signing_url ||
+      res.data.attributes?.signers?.find(
+        (s) => s.email?.toLowerCase() === input.signer.email.toLowerCase()
+      )?.signing_url ||
       undefined;
 
-    const signerId = res.data.attributes?.signers?.[0]?.id;
+    const vendorSigner = res.data.attributes?.signers?.find(
+      (s) => s.email?.toLowerCase() === input.signer.email.toLowerCase()
+    );
+    const signerId = vendorSigner?.id || res.data.attributes?.signers?.[0]?.id;
 
     return {
       externalId: res.data.id,
@@ -149,6 +166,7 @@ export class MekariESignProvider implements ESignProvider {
       signUrl,
     };
   }
+
 
   /**
    * Memicu pengiriman kode OTP verifikasi penandatanganan ke email signer (Mekari V2)

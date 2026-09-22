@@ -39,6 +39,7 @@ export interface RequestSignInput {
 export interface SubmitResult {
   externalId: string;
   signUrl?: string; // hanya requestSign, jika provider menyediakan
+  signerId?: string; // signer_id untuk Mekari V2 OTP sign & validate
 }
 
 export type ESignEvent = {

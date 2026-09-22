@@ -6,6 +6,7 @@ import {
   createDraftPengadaan,
   updateDraftPengadaan,
   deleteDraftPengadaan,
+  submitPengadaanToVendor,
   submitTbigSign,
 } from "@/lib/workflow/pengadaan-workflow";
 
@@ -132,6 +133,20 @@ export async function deletePengadaanAction(pengadaanId: string): Promise<void> 
   await requireRole("TBIG");
   await deleteDraftPengadaan(pengadaanId);
   redirect("/tbig/pengadaan");
+}
+
+export async function sendPengadaanToVendorAction(
+  pengadaanId: string
+): Promise<{ error?: string }> {
+  const user = await requireRole("TBIG");
+  try {
+    await submitPengadaanToVendor(pengadaanId, user.id);
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Gagal mengajukan pengadaan ke vendor";
+    return { error: message };
+  }
+  redirect(`/tbig/pengadaan/${pengadaanId}`);
 }
 
 export async function signPengadaanAsTbigAction(

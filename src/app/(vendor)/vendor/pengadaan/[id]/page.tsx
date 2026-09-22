@@ -14,6 +14,7 @@ import {
 import { RejectDialog } from "./RejectDialog";
 import { ApproveDialog } from "./ApproveDialog";
 import { RetryVendorButton } from "./RetryVendorButton";
+import { VendorSignOtpDialog } from "./VendorSignOtpDialog";
 import { ActivityLogTimeline } from "@/components/ActivityLogTimeline";
 import { CheckStatusButton } from "@/components/CheckStatusButton";
 
@@ -48,11 +49,8 @@ export default async function VendorDetailPengadaanPage({
     notFound();
   }
 
-  // PRD 7.4: Vendor tidak boleh melihat pengadaan DRAFT atau MENUNGGU_TTD_TBIG
-  if (
-    pengadaan.status === PengadaanStatus.DRAFT ||
-    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG
-  ) {
+  // PRD 7.4: Vendor tidak boleh melihat pengadaan berstatus DRAFT
+  if (pengadaan.status === PengadaanStatus.DRAFT) {
     notFound();
   }
 
@@ -69,14 +67,19 @@ export default async function VendorDetailPengadaanPage({
     latestJob?.type === SignJobType.SIGN_VENDOR &&
     latestJob?.status === SignJobStatus.WAITING_SIGNER;
 
-  // Auto-refresh saat pembubuhan meterai sedang berlangsung
-  const isProcessing = isMeteraiPending;
+  // Auto-refresh saat proses meterai, tanda tangan, atau menunggu ttd TBIG
+  const isProcessing =
+    isMeteraiPending ||
+    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG;
 
-  // PRD 8.6: Preview PDF versi yang sudah ditandatangani TBIG atau lebih baru
+  // PRD 8.6: Preview PDF
   const vendorFilePriority: FileKind[] = [
     FileKind.FINAL,
+    FileKind.SIGNED_VENDOR,
     FileKind.STAMPED_METERAI,
     FileKind.SIGNED_TBIG,
+    FileKind.PREPARED,
+    FileKind.ORIGINAL,
   ];
 
   const activeFile = vendorFilePriority
@@ -134,27 +137,14 @@ export default async function VendorDetailPengadaanPage({
             </>
           )}
 
-          {isWaitingSigner && latestJob?.signUrl && (
-            <Link
-              href={latestJob.signUrl}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center space-x-1.5 cursor-pointer"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                />
-              </svg>
-              <span>Lanjutkan Tanda Tangan</span>
-            </Link>
+          {isWaitingSigner && (
+            <VendorSignOtpDialog
+              pengadaanId={pengadaan.id}
+              noSuratPesanan={pengadaan.noSuratPesanan}
+              vendorNama={pengadaan.vendor.nama}
+              initialEmail={user.email}
+              isMockMode={process.env.ESIGN_MODE === "mock"}
+            />
           )}
 
           {isJobFailed && latestJob && (
@@ -199,6 +189,38 @@ export default async function VendorDetailPengadaanPage({
           )}
         </div>
       </div>
+
+      {/* Banner Menunggu Tanda Tangan TBIG */}
+      {pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG && (
+        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 shadow-xs">
+          <div className="flex items-start space-x-3">
+            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-sm font-bold text-blue-900">
+                Menunggu Tanda Tangan TBIG
+              </p>
+              <p className="text-sm text-blue-800 leading-relaxed">
+                Dokumen telah Anda setujui dan ditandatangani serta dibubuhi eMeterai. Saat ini sedang menunggu proses tanda tangan pihak TBIG. Halaman akan diperbarui otomatis saat proses selesai.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Banner Selesai jika SELESAI */}
       {pengadaan.status === PengadaanStatus.SELESAI && (
@@ -299,12 +321,10 @@ export default async function VendorDetailPengadaanPage({
             </div>
             <div>
               <p className="text-sm font-bold text-indigo-950">
-                Dokumen Siap Ditandatangani
+                Dokumen Siap Ditandatangani (Verifikasi OTP In-App)
               </p>
               <p className="text-xs text-indigo-800 mt-0.5">
-                {latestJob?.signUrl
-                  ? "eMeterai berhasil dibubuhkan. Klik tombol di samping untuk melanjutkan ke proses penandatanganan elektronik."
-                  : "Silakan cek email Anda dari Mekari Sign untuk menandatangani dokumen pengadaan."}
+                eMeterai resmi (kuota Vendor) telah disiapkan. Klik tombol di samping untuk memverifikasi OTP dan menandatangani dokumen langsung di sini.
               </p>
             </div>
           </div>
@@ -313,32 +333,16 @@ export default async function VendorDetailPengadaanPage({
               <CheckStatusButton
                 pengadaanId={pengadaan.id}
                 jobCreatedAt={latestJob.createdAt}
-                forceShow={!latestJob?.signUrl}
                 label="Cek status"
               />
             )}
-            {latestJob?.signUrl && (
-              <Link
-                href={latestJob.signUrl}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs shrink-0 flex items-center space-x-1.5"
-              >
-                <span>Lanjutkan Tanda Tangan</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M14 5l7 7m0 0l-7 7m7-7H3"
-                  />
-                </svg>
-              </Link>
-            )}
+            <VendorSignOtpDialog
+              pengadaanId={pengadaan.id}
+              noSuratPesanan={pengadaan.noSuratPesanan}
+              vendorNama={pengadaan.vendor.nama}
+              initialEmail={user.email}
+              isMockMode={process.env.ESIGN_MODE === "mock"}
+            />
           </div>
         </div>
       )}

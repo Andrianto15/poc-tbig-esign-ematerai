@@ -35,6 +35,13 @@ function getActionMeta(action: string): ActionMeta {
         badgeBg: "bg-zinc-100",
         badgeText: "text-zinc-700",
       };
+    case "PENGADAAN_SUBMITTED_TO_VENDOR":
+      return {
+        label: "Diajukan ke Rekanan Vendor",
+        dotColor: "bg-blue-500",
+        badgeBg: "bg-blue-50",
+        badgeText: "text-blue-700",
+      };
     case "TBIG_SIGN_SUBMITTED":
       return {
         label: "Tanda Tangan TBIG Diajukan",
@@ -44,10 +51,10 @@ function getActionMeta(action: string): ActionMeta {
       };
     case "TBIG_SIGNED":
       return {
-        label: "Tanda Tangan TBIG Selesai",
-        dotColor: "bg-blue-600",
-        badgeBg: "bg-blue-50",
-        badgeText: "text-blue-700",
+        label: "Tanda Tangan TBIG Selesai (Final)",
+        dotColor: "bg-emerald-600",
+        badgeBg: "bg-emerald-50",
+        badgeText: "text-emerald-700",
       };
     case "TBIG_SIGN_RETRY":
       return {
@@ -86,7 +93,7 @@ function getActionMeta(action: string): ActionMeta {
       };
     case "VENDOR_SIGNED":
       return {
-        label: "Tanda Tangan Vendor Selesai (Final)",
+        label: "Tanda Tangan Vendor Selesai",
         dotColor: "bg-emerald-600",
         badgeBg: "bg-emerald-50",
         badgeText: "text-emerald-800",

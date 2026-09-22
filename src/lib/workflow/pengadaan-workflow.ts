@@ -666,6 +666,7 @@ export async function retryVendorSign(input: SubmitVendorApprovalInput) {
       status: SignJobStatus.WAITING_SIGNER,
       provider: provider.name,
       externalId: requestResult.externalId,
+      signerId: requestResult.signerId,
       signUrl: requestResult.signUrl,
       inputFileKind: FileKind.STAMPED_METERAI,
       outputFileKind: FileKind.SIGNED_VENDOR,
@@ -801,6 +802,7 @@ export async function completeMeteraiTransition(
       status: SignJobStatus.WAITING_SIGNER,
       provider: provider.name,
       externalId: requestResult.externalId,
+      signerId: requestResult.signerId,
       signUrl: requestResult.signUrl,
       inputFileKind: FileKind.STAMPED_METERAI,
       outputFileKind: FileKind.SIGNED_VENDOR,
@@ -885,7 +887,7 @@ export async function completeVendorSignTransition(
       pengadaanId: job.pengadaanId,
       actorId: null,
       action: "VENDOR_SIGNED",
-      note: "Dokumen pengadaan selesai ditandatangani oleh Vendor. Menunggu tanda tangan TBIG.",
+      note: "Dokumen pengadaan selesai ditandatangani oleh Vendor via OTP in-app. Kuota eMeterai resmi dibebankan ke akun Vendor.",
     },
   });
 

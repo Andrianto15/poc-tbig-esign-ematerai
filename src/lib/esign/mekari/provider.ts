@@ -8,7 +8,7 @@ import {
 } from "../types";
 import { mekariRequest, MekariApiError } from "./client";
 import { buildHmacHeaders } from "./hmac";
-import { toMekariAnnotation } from "@/lib/pdf/signature-layout";
+import { toMekariAnnotation, LAYOUT } from "@/lib/pdf/signature-layout";
 
 interface MekariDocumentResponse {
   data: {
@@ -25,6 +25,7 @@ interface MekariDocumentResponse {
         signing_link?: string;
       }>;
       signers?: Array<{
+        id?: string;
         name?: string;
         email?: string;
         status?: string;
@@ -101,11 +102,16 @@ export class MekariESignProvider implements ESignProvider {
   }
 
   /**
-   * Mengirim permintaan tanda tangan ke signer eksternal (Vendor)
+   * Mengirim permintaan tanda tangan ke signer eksternal (Vendor) via Mekari V2
+   * dengan proteksi OTP email dan pembebanan kuota eMeterai ke vendor
    */
   async requestSign(input: RequestSignInput): Promise<SubmitResult> {
     const base64Doc = Buffer.from(input.pdf).toString("base64");
-    const annotation = toMekariAnnotation(input.box, input.page, "signature");
+    const sigAnnotation = toMekariAnnotation(input.box, input.page, "signature");
+    const meteraiAnnotation = {
+      ...toMekariAnnotation(LAYOUT.vendorMeterai, input.page, "emeterai"),
+      meterai_provided: false,
+    };
 
     const payload = {
       doc: base64Doc,
@@ -114,10 +120,11 @@ export class MekariESignProvider implements ESignProvider {
         {
           name: input.signer.name,
           email: input.signer.email,
-          annotations: [annotation],
+          requires_otp: true,
+          otp_channel: "email",
+          annotations: [sigAnnotation, meteraiAnnotation],
         },
       ],
-      signing_url: true,
       signing_order: false,
       callback_url: input.callbackUrl,
     };
@@ -125,7 +132,8 @@ export class MekariESignProvider implements ESignProvider {
     const res = await mekariRequest<MekariDocumentResponse>(
       "POST",
       "/documents/request_global_sign",
-      payload
+      payload,
+      { pathPrefix: "/v2/esign-hmac/v2" }
     );
 
     const signUrl =
@@ -133,10 +141,74 @@ export class MekariESignProvider implements ESignProvider {
       res.data.attributes?.signers?.[0]?.signing_url ||
       undefined;
 
+    const signerId = res.data.attributes?.signers?.[0]?.id;
+
     return {
       externalId: res.data.id,
+      signerId,
       signUrl,
     };
+  }
+
+  /**
+   * Memicu pengiriman kode OTP verifikasi penandatanganan ke email signer (Mekari V2)
+   */
+  async requestOtp(signerId: string): Promise<{ success: boolean; message?: string }> {
+    const res = await mekariRequest<{ data?: { message?: string } }>(
+      "POST",
+      "/documents/request_otp_sign",
+      { signer_id: signerId },
+      { pathPrefix: "/v2/esign-hmac/v2" }
+    );
+    return { success: true, message: res.data?.message };
+  }
+
+  /**
+   * Memvalidasi kode OTP yang dimasukkan oleh signer di Mekari V2
+   */
+  async validateOtp(signerId: string, otp: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await mekariRequest(
+        "POST",
+        `/documents/validate_otp/${signerId}`,
+        { otp: otp.trim() },
+        { pathPrefix: "/v2/esign-hmac/v2" }
+      );
+      return { success: true };
+    } catch (err: unknown) {
+      if (err instanceof MekariApiError && err.body && typeof err.body === "object") {
+        const params = (err.body as { data?: { params?: { otp?: string[] } } })?.data?.params;
+        const otpError = params?.otp?.[0] || "Kode OTP tidak valid";
+        return { success: false, error: otpError };
+      }
+      return { success: false, error: (err as Error).message || "Gagal validasi OTP" };
+    }
+  }
+
+  /**
+   * Menyelesaikan penandatanganan dokumen di Mekari V2 setelah validasi OTP
+   */
+  async signDocument(
+    signerId: string,
+    signatureBase64?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const dummySign =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+      await mekariRequest(
+        "POST",
+        "/documents/signing",
+        {
+          signer_id: signerId,
+          type: "image",
+          signature: signatureBase64 || dummySign,
+        },
+        { pathPrefix: "/v2/esign-hmac/v2" }
+      );
+      return { success: true };
+    } catch (err: unknown) {
+      return { success: false, error: (err as Error).message || "Gagal menyelesaikan tanda tangan" };
+    }
   }
 
   /**

@@ -14,6 +14,7 @@ import {
 import { RejectDialog } from "./RejectDialog";
 import { ApproveDialog } from "./ApproveDialog";
 import { RetryVendorButton } from "./RetryVendorButton";
+import { VendorSignOtpDialog } from "./VendorSignOtpDialog";
 import { ActivityLogTimeline } from "@/components/ActivityLogTimeline";
 import { CheckStatusButton } from "@/components/CheckStatusButton";
 
@@ -136,27 +137,14 @@ export default async function VendorDetailPengadaanPage({
             </>
           )}
 
-          {isWaitingSigner && latestJob?.signUrl && (
-            <Link
-              href={latestJob.signUrl}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center space-x-1.5 cursor-pointer"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                />
-              </svg>
-              <span>Lanjutkan Tanda Tangan</span>
-            </Link>
+          {isWaitingSigner && (
+            <VendorSignOtpDialog
+              pengadaanId={pengadaan.id}
+              noSuratPesanan={pengadaan.noSuratPesanan}
+              vendorNama={pengadaan.vendor.nama}
+              initialEmail={user.email}
+              isMockMode={process.env.ESIGN_MODE === "mock"}
+            />
           )}
 
           {isJobFailed && latestJob && (
@@ -333,12 +321,10 @@ export default async function VendorDetailPengadaanPage({
             </div>
             <div>
               <p className="text-sm font-bold text-indigo-950">
-                Dokumen Siap Ditandatangani
+                Dokumen Siap Ditandatangani (Verifikasi OTP In-App)
               </p>
               <p className="text-xs text-indigo-800 mt-0.5">
-                {latestJob?.signUrl
-                  ? "eMeterai berhasil dibubuhkan. Klik tombol di samping untuk melanjutkan ke proses penandatanganan elektronik."
-                  : "Silakan cek email Anda dari Mekari Sign untuk menandatangani dokumen pengadaan."}
+                eMeterai resmi (kuota Vendor) telah disiapkan. Klik tombol di samping untuk memverifikasi OTP dan menandatangani dokumen langsung di sini.
               </p>
             </div>
           </div>
@@ -347,32 +333,16 @@ export default async function VendorDetailPengadaanPage({
               <CheckStatusButton
                 pengadaanId={pengadaan.id}
                 jobCreatedAt={latestJob.createdAt}
-                forceShow={!latestJob?.signUrl}
                 label="Cek status"
               />
             )}
-            {latestJob?.signUrl && (
-              <Link
-                href={latestJob.signUrl}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs shrink-0 flex items-center space-x-1.5"
-              >
-                <span>Lanjutkan Tanda Tangan</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M14 5l7 7m0 0l-7 7m7-7H3"
-                  />
-                </svg>
-              </Link>
-            )}
+            <VendorSignOtpDialog
+              pengadaanId={pengadaan.id}
+              noSuratPesanan={pengadaan.noSuratPesanan}
+              vendorNama={pengadaan.vendor.nama}
+              initialEmail={user.email}
+              isMockMode={process.env.ESIGN_MODE === "mock"}
+            />
           </div>
         </div>
       )}

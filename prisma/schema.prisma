@@ -113,6 +113,7 @@ model SignJob {
   status         SignJobStatus @default(PENDING)
   provider       String        // "mock" | "mekari"
   externalId     String?       @unique
+  signerId       String?       // ID signer spesifik dari Mekari V2 untuk OTP
   signUrl        String?
   inputFileKind  FileKind
   outputFileKind FileKind

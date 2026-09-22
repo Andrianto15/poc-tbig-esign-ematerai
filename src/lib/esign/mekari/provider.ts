@@ -45,9 +45,7 @@ export class MekariESignProvider implements ESignProvider {
     const signerName =
       process.env.MEKARI_TBIG_SIGNER_NAME || "TBIG Procurement";
     const signerEmail =
-      process.env.MEKARI_TBIG_SIGNER_EMAIL ||
-      process.env.SEED_TBIG_EMAIL ||
-      "devtujuhsembilan@gmail.com";
+      process.env.MEKARI_TBIG_SIGNER_EMAIL || "devtujuhsembilan@gmail.com";
 
     const base64Doc = Buffer.from(input.pdf).toString("base64");
     const annotation = toMekariAnnotation(input.box, input.page, "signature");

@@ -23,12 +23,14 @@ async function main() {
   const pdfBytes = await createSamplePdf();
   const callbackUrl = `${process.env.APP_BASE_URL || "http://localhost:3000"}/api/webhooks/esign?token=${process.env.ESIGN_WEBHOOK_TOKEN || "test-token"}`;
 
+  const ts = Date.now();
+
   // 1. Uji stampMeterai
   console.log("\n[1/3] Menguji stampMeterai ke sandbox...");
   const stampRes = await provider.stampMeterai({
     jobId: "test-job-meterai",
     pdf: pdfBytes,
-    filename: "sp-meterai-sample.pdf",
+    filename: `sp-meterai-${ts}.pdf`,
     page: 1,
     box: LAYOUT.vendorMeterai,
     callbackUrl,
@@ -40,7 +42,7 @@ async function main() {
   const autoSignRes = await provider.autoSign({
     jobId: "test-job-autosign",
     pdf: pdfBytes,
-    filename: "sp-autosign-sample.pdf",
+    filename: `sp-autosign-${ts}.pdf`,
     page: 1,
     box: LAYOUT.tbigSignature,
     callbackUrl,
@@ -53,7 +55,7 @@ async function main() {
   const requestSignRes = await provider.requestSign({
     jobId: "test-job-requestsign",
     pdf: pdfBytes,
-    filename: "sp-vendor-sample.pdf",
+    filename: `sp-vendor-${ts}.pdf`,
     signer: {
       name: "PT Vendor Sukses Mandiri",
       email: vendorEmail,

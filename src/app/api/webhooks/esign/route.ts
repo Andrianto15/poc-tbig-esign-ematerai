@@ -26,15 +26,37 @@ export async function POST(req: NextRequest) {
   }
 
   const provider = getESignProvider();
-  const payloadObj = (rawPayload && typeof rawPayload === "object") ? (rawPayload as Record<string, unknown>) : {};
+  const payloadObj =
+    rawPayload && typeof rawPayload === "object"
+      ? (rawPayload as Record<string, unknown>)
+      : {};
+
+  const dataObj = payloadObj.data as Record<string, unknown> | undefined;
+  const attrsObj = dataObj?.attributes as Record<string, unknown> | undefined;
+
+  const extractedExternalId =
+    (typeof payloadObj.externalId === "string" ? payloadObj.externalId : null) ||
+    (typeof dataObj?.id === "string" ? dataObj.id : null) ||
+    (typeof payloadObj.document_id === "string" ? payloadObj.document_id : null) ||
+    (typeof payloadObj.id === "string" ? payloadObj.id : null);
+
+  const extractedEventType =
+    (typeof payloadObj.type === "string" ? payloadObj.type : null) ||
+    (typeof attrsObj?.signing_status === "string"
+      ? `signing.${attrsObj.signing_status}`
+      : null) ||
+    (typeof attrsObj?.stamping_status === "string"
+      ? `stamping.${attrsObj.stamping_status}`
+      : null) ||
+    (typeof dataObj?.type === "string" ? dataObj.type : null);
 
   // Simpan payload mentah ke WebhookEvent
   const webhookEvent = await prisma.webhookEvent.create({
     data: {
       provider: provider.name,
       payload: payloadObj as Prisma.InputJsonObject,
-      eventType: typeof payloadObj.type === "string" ? payloadObj.type : null,
-      externalId: typeof payloadObj.externalId === "string" ? payloadObj.externalId : null,
+      eventType: extractedEventType,
+      externalId: extractedExternalId,
     },
   });
 
@@ -52,6 +74,18 @@ export async function POST(req: NextRequest) {
       { error: "Payload webhook tidak valid atau verifikasi gagal." },
       { status: 400 }
     );
+  }
+
+  // Jika parsedEvent bernilai null (misal event notifikasi intermediate in_progress), catat dan abaikan
+  if (!parsedEvent) {
+    await prisma.webhookEvent.update({
+      where: { id: webhookEvent.id },
+      data: { processedAt: new Date() },
+    });
+    return NextResponse.json({
+      success: true,
+      message: "Event intermediate/in-progress dicatat dan diabaikan.",
+    });
   }
 
   // 4. Proses event lewat handleESignEvent

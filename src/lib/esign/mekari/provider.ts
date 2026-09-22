@@ -222,7 +222,7 @@ export class MekariESignProvider implements ESignProvider {
   /**
    * Parse dan verifikasi event webhook dari Mekari
    */
-  async parseWebhook(req: Request): Promise<ESignEvent> {
+  async parseWebhook(req: Request): Promise<ESignEvent | null> {
     const url = new URL(req.url);
     const token = url.searchParams.get("token");
     const expectedToken = process.env.ESIGN_WEBHOOK_TOKEN;
@@ -277,10 +277,15 @@ export class MekariESignProvider implements ESignProvider {
       stampingStatus === "failed" ||
       generalStatus === "failed";
 
+    if (!isSuccess && !isFailed) {
+      // Event masih in_progress atau event pembuka, tidak perlu memicu transisi dokumen
+      return null;
+    }
+
     return {
       provider: "mekari",
       externalId,
-      type: isFailed ? "FAILED" : isSuccess ? "COMPLETED" : "COMPLETED",
+      type: isFailed ? "FAILED" : "COMPLETED",
       errorMessage: isFailed
         ? `Status webhook gagal: signing=${signingStatus}, stamping=${stampingStatus}`
         : undefined,

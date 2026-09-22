@@ -164,7 +164,7 @@ async function main() {
     }),
   });
   const parsed = await provider.parseWebhook(mockWebhookReq);
-  if (parsed.externalId !== "mock-test-webhook" || parsed.type !== "COMPLETED") {
+  if (!parsed || parsed.externalId !== "mock-test-webhook" || parsed.type !== "COMPLETED") {
     throw new Error("parseWebhook mock tidak menghasilkan ESignEvent yang valid.");
   }
   console.log(`✓ parseWebhook berhasil mem-parse payload mock: externalId=${parsed.externalId}, type=${parsed.type}`);

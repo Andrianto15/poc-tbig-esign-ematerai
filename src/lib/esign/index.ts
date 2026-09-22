@@ -1,8 +1,10 @@
 import { ESignProvider } from "./types";
 import { MockESignProvider } from "./mock/provider";
+import { MekariESignProvider } from "./mekari/provider";
 
 export * from "./types";
 export * from "./mock/provider";
+export * from "./mekari/provider";
 
 let providerInstance: ESignProvider | null = null;
 
@@ -15,10 +17,7 @@ export function getESignProvider(): ESignProvider {
   if (mode === "mock") {
     providerInstance = new MockESignProvider();
   } else if (mode === "mekari") {
-    // Fase 2: MekariESignProvider (PRD Bagian 0 Aturan 4 & Step 2.3)
-    throw new Error(
-      "MekariESignProvider belum diintegrasikan di Fase 1. Gunakan ESIGN_MODE=mock."
-    );
+    providerInstance = new MekariESignProvider();
   } else {
     throw new Error(
       `ESIGN_MODE tidak valid: '${mode}'. Gunakan 'mock' atau 'mekari'.`

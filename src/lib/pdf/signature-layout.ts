@@ -47,6 +47,6 @@ export function toMekariAnnotation(
     element_height: box.height,
     canvas_width: PAGE.width,
     canvas_height: PAGE.height,
-    type_of: typeOf,
+    type_of: typeOf === "emeterai" ? "meterai" : typeOf,
   };
 }

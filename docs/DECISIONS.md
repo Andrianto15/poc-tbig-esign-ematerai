@@ -103,3 +103,13 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
 - **Konteks**: Integrasi langsung dengan Mekari eSign Sandbox membutuhkan autentikasi HTTP Signature berbasis HMAC-SHA256 yang deterministik, aman, dan tanpa membocorkan kredensial atau payload dokumen.
 - **Keputusan**: Dibuat builder header di `src/lib/esign/mekari/hmac.ts` dan wrapper `mekariRequest` di `src/lib/esign/mekari/client.ts` menggunakan native `node:crypto`, `fetch`, dan `AbortSignal.timeout(30000)`. Pengujian deterministik diuji via `src/lib/esign/mekari/hmac.test.ts` dan probe end-to-end sandbox diuji via `scripts/mekari-ping.ts`.
 - **Konsekuensi**: Modul HMAC siap digunakan oleh provider Fase 2 tanpa tambahan library eksternal, aman dari kebocoran secret/payload base64, dan koneksi ke endpoint sandbox `/profile` terkonfirmasi 200 OK.
+
+### 2026-09-22 - MekariESignProvider Implementation (Step 2.3)
+- **Konteks**: Diperlukan implementasi nyata provider `ESignProvider` untuk berkomunikasi langsung dengan Sandbox Mekari eSign (`stampMeterai`, `autoSign`, `requestSign`, `downloadDocument`, `getStatus`, dan `parseWebhook`).
+- **Keputusan**:
+  1. Dibuat kelas `MekariESignProvider` di `src/lib/esign/mekari/provider.ts` yang mengabstraksi panggilan API HMAC ke Mekari Sandbox.
+  2. Pada `toMekariAnnotation`, nilai `typeOf === 'emeterai'` dikonversi menjadi `'meterai'` sesuai format payload resmi Mekari.
+  3. `autoSign` mengirim dokumen dengan konfigurasi signer internal TBIG (`is_autosign: true`), `stampMeterai` memanggil endpoint `/documents/stamp`, dan `requestSign` mengirim permintaan ke penandatangan vendor.
+  4. `downloadDocument` mengambil binary stream PDF langsung dari endpoint `/documents/:id/download` dengan header HMAC terotentikasi.
+  5. `getESignProvider()` di `src/lib/esign/index.ts` mengaktifkan `MekariESignProvider` saat `ESIGN_MODE=mekari`.
+- **Konsekuensi**: Seluruh operasi berhasil diverifikasi langsung ke Sandbox Mekari melalui `scripts/verify-step-2-3.ts` dengan status HTTP 200 dan menghasilkan `externalId` valid.

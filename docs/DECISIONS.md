@@ -138,3 +138,18 @@ Dokumen ini mencatat keputusan teknis, kompromi arsitektural, atau deviasi dari 
   3. Konvensi ini menjawab secara tuntas pertanyaan teknis pada `docs/mekari/qa.md` Poin #5.
 - **Konsekuensi**: Tidak diperlukan perubahan rumus konversi terbalik. Seluruh kotak Lembar Pengesahan telah terverifikasi secara matematis dan fisik tepat sasaran (pixel-perfect) pada sandbox Mekari.
 
+### 2026-09-22 - Urutan Meterai vs Tanda Tangan Digital Sandbox Mekari (Step 2.7)
+- **Konteks**: Menentukan urutan job pengadaan pada transisi T6/T7 dan memverifikasi integritas sertifikat digital tanda tangan vs eMeterai pada sandbox Mekari eSign.
+- **Temuan Uji Sandbox**:
+  1. Pengujian aktual pembubuhan eMeterai (`POST /documents/stamp`) menambahkan sertifikat digital resmi Peruri (`/FT /Sig`, SubFilter `/ETSI.CAdES.detached`) yang mengunci dokumen.
+  2. Saat dokumen yang telah dibubuhi eMeterai diajukan untuk penandatanganan digital (`request_global_sign`), engine Mekari menolak dengan error `422 Unprocessable Entity`: `{"doc": ["File already has a certificate"]}`.
+  3. Dokumen yang ditandatangani secara digital terlebih dahulu (TBIG Sign -> Vendor Sign) dapat menerima pembubuhan eMeterai di akhir tanpa benturan sertifikat, menghasilkan PDF final dengan signature widget valid di Acrobat Reader.
+  4. Alternatif single envelope (`request_global_sign` dengan anotasi ttd TBIG + eMeterai + ttd Vendor sekaligus) didukung engine Mekari jika akun memiliki kuota dan konfigurasi template terdaftar.
+- **Keputusan**:
+  1. Untuk alur bertahap (multi-step workflow):
+     - **Urutan Resmi**: TBIG Sign (T3) -> Vendor Sign (T6) -> Stamp eMeterai (T7) -> Final (T8) [Opsi B] guna mencegah error `File already has a certificate`.
+     - Penyesuaian konfigurasi alur workflow dipertahankan kompatibel dengan transisi UI saat ini.
+  2. Hasil pengujian dicatat di `docs/mekari/qa.md` Poin #3 dan diverifikasi via skrip `scripts/verify-step-2-7.ts`.
+- **Konsekuensi**: Integritas kriptografis dokumen terjamin, tidak terjadi penolakan `File already has a certificate` dari engine Mekari, dan status UI pengadaan tetap konsisten bagi pengguna.
+
+

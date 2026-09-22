@@ -37,8 +37,15 @@ Dokumen ini mencatat konfirmasi teknis dari tim Mekari untuk implementasi Fase 2
     - Opsi C: Stamp eMeterai terlebih dahulu sebelum semua tanda tangan?
   - Apakah eMeterai dan tanda tangan bisa disubmit dalam 1 API call atau wajib bertahap?
 - **Jawaban Mekari**:
-  - *Status*: Pending
-  - *Catatan*:
+  - *Status*: Terverifikasi via Pengujian Sandbox Mekari (Step 2.7)
+  - *Temuan & Keputusan Teknis*:
+    1. **Urutan yang Didukung Engine Mekari**:
+       - Pembubuhan eMeterai via `POST /documents/stamp` membubuhkan segel digital Peruri (`/FT /Sig`, SubFilter `/ETSI.CAdES.detached`) yang mengunci sertifikat kriptografis dokumen.
+       - Jika memanggil `request_global_sign` di atas dokumen yang telah ber-meterai, engine Mekari menolak dengan pesan error `422 Unprocessable Entity`: `{"doc": ["File already has a certificate"]}`.
+       - Oleh karena itu, **urutan penandatanganan dan eMeterai bertahap harus menempatkan eMeterai setelah tanda tangan digital** (Opsi B: TBIG Sign -> Vendor Sign -> Stamp eMeterai) ATAU menggabungkan tanda tangan dan meterai dalam satu siklus envelope jika didukung.
+    2. **Kompatibilitas Alur Saat Ini**:
+       - Dalam alur bertahap POC, urutan yang sah tanpa benturan sertifikat adalah **TBIG Sign -> Vendor Sign -> Stamp eMeterai**.
+       - Dokumen final yang dihasilkan pada alur tersebut memuat anotasi signature widget `/FT /Sig` valid di panel Acrobat Reader tanpa merusak integritas dokumen.
 
 ---
 

@@ -63,8 +63,12 @@ Dokumen ini mencatat konfirmasi teknis dari tim Mekari untuk implementasi Fase 2
   - Berapa ukuran rekomendasi bounding box (`width` & `height`) untuk stempel eMeterai Peruri dan tanda tangan digital?
   - Apakah posisi eMeterai diperbolehkan sedikit beririsan/menempel dengan tanda tangan (seperti meterai fisik)?
 - **Jawaban Mekari**:
-  - *Status*: Pending
+  - *Status*: Terkonfirmasi via Sandbox Probe (Step 2.6)
   - *Catatan*:
+    1. Origin acuan Mekari adalah **Top-Left (0,0)** dengan satuan point (A4: 595 × 842 pt).
+    2. Mekari melakukan konversi otomatis ke PDF native bottom-left: `y_pdf = canvas_height - position_y - element_height`.
+    3. Posisi `vendorMeterai` di `(x: 330, y: 560, w: 80, h: 80)` menghasilkan native PDF `/Rect [330 202 410 282]`, persis 100% mendarat tepat di dalam kotak penanda Lembar Pengesahan.
+    4. Koordinat `tbigSignature` `[60, 202, 240, 282]` dan `vendorSignature` `[420, 202, 550, 282]` berada sejajar secara horizontal tanpa overlap.
 
 ---
 

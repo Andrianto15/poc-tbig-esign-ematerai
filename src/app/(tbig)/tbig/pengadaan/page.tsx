@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/user";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, STATUS_CONFIG } from "@/components/StatusBadge";
 import { formatRupiah, formatDateIndo } from "@/lib/pdf/lembar-pengesahan";
 import { PengadaanStatus } from "@/generated/prisma/enums";
 
@@ -67,7 +67,7 @@ export default async function TbigPengadaanListPage({
                   : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
               }`}
             >
-              {st}
+              {STATUS_CONFIG[st]?.label || st}
             </Link>
           ))}
         </div>

@@ -68,7 +68,7 @@ export default async function VendorPengadaanPage() {
           </div>
           <p className="text-base font-semibold text-zinc-800">Belum Ada Pengadaan</p>
           <p className="text-sm text-zinc-500 max-w-sm mx-auto">
-            Saat ini belum ada pengadaan yang siap untuk ditinjau atau ditandatangani. Dokumen baru akan muncul di sini setelah ditandatangani oleh TBIG.
+            Saat ini belum ada pengadaan yang siap untuk ditinjau atau ditandatangani. Dokumen baru akan muncul di sini setelah diajukan oleh pihak TBIG.
           </p>
         </div>
       ) : (

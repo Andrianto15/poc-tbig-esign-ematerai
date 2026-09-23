@@ -17,6 +17,7 @@ import { RetryVendorButton } from "./RetryVendorButton";
 import { VendorSignOtpDialog } from "./VendorSignOtpDialog";
 import { ActivityLogTimeline } from "@/components/ActivityLogTimeline";
 import { CheckStatusButton } from "@/components/CheckStatusButton";
+import { syncPengadaanJobStatus } from "@/lib/workflow/sync-status";
 
 export default async function VendorDetailPengadaanPage({
   params,
@@ -30,7 +31,7 @@ export default async function VendorDetailPengadaanPage({
     notFound();
   }
 
-  const pengadaan = await prisma.pengadaan.findUnique({
+  let pengadaan = await prisma.pengadaan.findUnique({
     where: { id },
     include: {
       vendor: true,
@@ -54,7 +55,40 @@ export default async function VendorDetailPengadaanPage({
     notFound();
   }
 
-  const latestJob = pengadaan.jobs[0];
+  let latestJob = pengadaan.jobs[0];
+
+  // Jika vendor belum tercatat signed tapi job WAITING_SIGNER, sinkronkan status dengan provider
+  if (
+    pengadaan.status === PengadaanStatus.MENUNGGU_TTD_VENDOR &&
+    latestJob?.status === SignJobStatus.WAITING_SIGNER &&
+    !pengadaan.vendorSignedAt &&
+    latestJob?.externalId
+  ) {
+    try {
+      const syncResult = await syncPengadaanJobStatus(pengadaan.id);
+      if (syncResult.updated) {
+        const refreshed = await prisma.pengadaan.findUnique({
+          where: { id },
+          include: {
+            vendor: true,
+            files: true,
+            jobs: {
+              orderBy: { createdAt: "desc" },
+            },
+            logs: {
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        });
+        if (refreshed) {
+          pengadaan = refreshed;
+          latestJob = pengadaan.jobs[0];
+        }
+      }
+    } catch {
+      // Abaikan jika sync background gagal
+    }
+  }
   const isJobFailed = latestJob?.status === SignJobStatus.FAILED;
 
   const isMeteraiPending =
@@ -275,54 +309,13 @@ export default async function VendorDetailPengadaanPage({
 
       {/* Banner Menunggu Tanda Tangan (Job WAITING_SIGNER) */}
       {isWaitingSigner && (
-        <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
-          <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0 mt-0.5">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-indigo-950">
-                Dokumen Siap Ditandatangani & Dibubuhi eMeterai
-              </p>
-              <p className="text-xs text-indigo-800 mt-0.5">
-                {latestJob?.signUrl
-                  ? "eMeterai resmi (kuota Vendor) telah disiapkan. Klik tombol di samping untuk menandatangani dokumen dan memvalidasi OTP di Mekari Sign."
-                  : "eMeterai resmi (kuota Vendor) telah disiapkan. Silakan verifikasi OTP untuk menyelesaikan tanda tangan."}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {latestJob && (
-              <CheckStatusButton
-                pengadaanId={pengadaan.id}
-                jobCreatedAt={latestJob.createdAt}
-                label="Cek status"
-              />
-            )}
-            {latestJob?.signUrl ? (
-              <a
-                href={latestJob.signUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs shrink-0 flex items-center space-x-1.5"
-              >
-                <span>Lanjutkan Tanda Tangan</span>
+        pengadaan.vendorSignedAt ? (
+          <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 shrink-0 mt-0.5">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="w-3.5 h-3.5"
+                  className="w-5 h-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -331,21 +324,104 @@ export default async function VendorDetailPengadaanPage({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M14 5l7 7m0 0l-7 7m7-7H3"
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-              </a>
-            ) : (
-              <VendorSignOtpDialog
-                pengadaanId={pengadaan.id}
-                noSuratPesanan={pengadaan.noSuratPesanan}
-                vendorNama={pengadaan.vendor.nama}
-                initialEmail={user.email}
-                isMockMode={process.env.ESIGN_MODE === "mock"}
-              />
-            )}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-blue-950">
+                  Anda Telah Menandatangani Dokumen
+                </p>
+                <p className="text-xs text-blue-800 mt-0.5">
+                  Tanda tangan dan eMeterai telah selesai Anda verifikasi. Dokumen saat ini sedang menunggu penyelesaian tanda tangan dari pihak TBIG.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {latestJob && (
+                <CheckStatusButton
+                  pengadaanId={pengadaan.id}
+                  jobCreatedAt={latestJob.createdAt}
+                  forceShow={true}
+                  label="Cek status"
+                />
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0 mt-0.5">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-indigo-950">
+                  Dokumen Siap Ditandatangani & Dibubuhi eMeterai
+                </p>
+                <p className="text-xs text-indigo-800 mt-0.5">
+                  {latestJob?.signUrl
+                    ? "eMeterai resmi (kuota Vendor) telah disiapkan. Klik tombol di samping untuk menandatangani dokumen dan memvalidasi OTP di Mekari Sign."
+                    : "eMeterai resmi (kuota Vendor) telah disiapkan. Silakan verifikasi OTP untuk menyelesaikan tanda tangan."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {latestJob && (
+                <CheckStatusButton
+                  pengadaanId={pengadaan.id}
+                  jobCreatedAt={latestJob.createdAt}
+                  forceShow={true}
+                  label="Cek status"
+                />
+              )}
+              {latestJob?.signUrl ? (
+                <a
+                  href={latestJob.signUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs shrink-0 flex items-center space-x-1.5"
+                >
+                  <span>Lanjutkan Tanda Tangan</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                    />
+                  </svg>
+                </a>
+              ) : (
+                <VendorSignOtpDialog
+                  pengadaanId={pengadaan.id}
+                  noSuratPesanan={pengadaan.noSuratPesanan}
+                  vendorNama={pengadaan.vendor.nama}
+                  initialEmail={user.email}
+                  isMockMode={process.env.ESIGN_MODE === "mock"}
+                />
+              )}
+            </div>
+          </div>
+        )
       )}
 
       {/* Banner Sedang Membubuhkan eMeterai (Auto-Refresh) */}

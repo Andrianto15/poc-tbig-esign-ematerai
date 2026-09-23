@@ -19,6 +19,7 @@ interface MekariDocumentResponse {
       doc_url?: string;
       signing_status?: string;
       stamping_status?: string;
+      type_of_meterai?: string;
       signing_link?: Array<{
         recipient_email?: string;
         recipient_name?: string;
@@ -124,7 +125,9 @@ export class MekariESignProvider implements ESignProvider {
         {
           name: "Tower Bersama Group",
           email: tbigSignerEmail,
-          is_autosign: true,
+          is_autosign: false,
+          requires_otp: true,
+          otp_channel: "email",
           annotations: [tbigAnnotation],
         },
         {
@@ -160,10 +163,26 @@ export class MekariESignProvider implements ESignProvider {
     );
     const signerId = vendorSigner?.id || res.data.attributes?.signers?.[0]?.id;
 
+    const tbigSignUrl =
+      res.data.attributes?.signing_link?.find(
+        (l) => l.recipient_email?.toLowerCase() === tbigSignerEmail.toLowerCase()
+      )?.signing_link ||
+      res.data.attributes?.signers?.find(
+        (s) => s.email?.toLowerCase() === tbigSignerEmail.toLowerCase()
+      )?.signing_url ||
+      undefined;
+
+    const tbigSigner = res.data.attributes?.signers?.find(
+      (s) => s.email?.toLowerCase() === tbigSignerEmail.toLowerCase()
+    );
+    const tbigSignerId = tbigSigner?.id;
+
     return {
       externalId: res.data.id,
       signerId,
+      tbigSignerId,
       signUrl,
+      tbigSignUrl,
     };
   }
 
@@ -283,13 +302,19 @@ export class MekariESignProvider implements ESignProvider {
     const signingStatus = (attrs?.signing_status || "").toLowerCase();
     const stampingStatus = (attrs?.stamping_status || "").toLowerCase();
 
-    // Berhasil jika meterai sukses atau ttd selesai
-    if (
-      stampingStatus === "success" ||
-      stampingStatus === "stamped" ||
-      signingStatus === "completed" ||
-      signingStatus === "success"
-    ) {
+    // Cek apakah dokumen ini membutuhkan e-Meterai
+    const hasMeterai = Boolean(
+      attrs?.type_of_meterai ||
+      (stampingStatus && !["none", "not_stamped"].includes(stampingStatus))
+    );
+
+    const isSigningDone =
+      signingStatus === "completed" || signingStatus === "success";
+    const isStampingDone =
+      stampingStatus === "success" || stampingStatus === "stamped";
+
+    // Berhasil hanya jika penandatanganan selesai DAN (jika ada meterai) pembubuhan meterai juga telah sukses
+    if (isSigningDone && (!hasMeterai || isStampingDone)) {
       return {
         provider: "mekari",
         externalId,
@@ -316,7 +341,12 @@ export class MekariESignProvider implements ESignProvider {
     }
 
     // Dokumen masih dalam proses ("in_progress", "none", "pending")
-    return null;
+    return {
+      provider: "mekari",
+      externalId,
+      type: "IN_PROGRESS",
+      raw: res,
+    };
   }
 
   /**
@@ -363,12 +393,21 @@ export class MekariESignProvider implements ESignProvider {
       typeof body.status === "string" ? body.status : ""
     ).toLowerCase();
 
-    const isSuccess =
+    const hasMeterai = Boolean(
+      attrsObj?.type_of_meterai ||
+      (stampingStatus && !["none", "not_stamped"].includes(stampingStatus))
+    );
+
+    const isSigningDone =
       signingStatus === "completed" ||
       signingStatus === "success" ||
-      stampingStatus === "success" ||
       generalStatus === "completed" ||
       generalStatus === "success";
+
+    const isStampingDone =
+      stampingStatus === "success" || stampingStatus === "stamped";
+
+    const isSuccess = isSigningDone && (!hasMeterai || isStampingDone);
 
     const isFailed =
       signingStatus === "failed" ||
@@ -378,7 +417,14 @@ export class MekariESignProvider implements ESignProvider {
       generalStatus === "failed";
 
     if (!isSuccess && !isFailed) {
-      // Event masih in_progress atau event pembuka, tidak perlu memicu transisi dokumen
+      if (attrsObj?.signers && Array.isArray(attrsObj.signers)) {
+        return {
+          provider: "mekari",
+          externalId,
+          type: "IN_PROGRESS",
+          raw: body,
+        };
+      }
       return null;
     }
 

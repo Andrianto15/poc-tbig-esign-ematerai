@@ -253,17 +253,37 @@ export async function submitVendorOtpSignAction(
       return { error: signRes.error || "Gagal menyelesaikan tanda tangan di server Mekari." };
     }
 
-    // 3. Picu alur transisi penyelesaian dokumen lokal
-    await handleESignEvent({
-      provider: "mekari",
-      externalId: job.externalId,
-      type: "COMPLETED",
-      raw: {
-        inAppOtpSigned: true,
-        signerId: job.signerId,
-        timestamp: new Date().toISOString(),
+    const now = new Date();
+    // 3. Update status tanda tangan vendor pada pengadaan
+    const updatedPengadaan = await prisma.pengadaan.update({
+      where: { id: pengadaanId },
+      data: {
+        vendorSignedAt: now,
       },
     });
+
+    await prisma.activityLog.create({
+      data: {
+        pengadaanId,
+        actorId: user.id,
+        action: "VENDOR_SIGNED_OTP",
+        note: "Vendor telah menandatangani dokumen dan memvalidasi OTP secara in-app.",
+      },
+    });
+
+    // 4. Jika TBIG juga sudah tanda tangan, selesaikan dokumen dan picu alur transisi
+    if (updatedPengadaan.tbigSignedAt) {
+      await handleESignEvent({
+        provider: "mekari",
+        externalId: job.externalId,
+        type: "COMPLETED",
+        raw: {
+          inAppOtpSigned: true,
+          signerId: job.signerId,
+          timestamp: now.toISOString(),
+        },
+      });
+    }
 
     safeRevalidatePengadaan(pengadaanId);
     return {};

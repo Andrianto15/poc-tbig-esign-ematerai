@@ -8,19 +8,21 @@ import { formatRupiah, formatDateIndo } from "@/lib/pdf/lembar-pengesahan";
 import { FileKind, PengadaanStatus, SignJobStatus } from "@/generated/prisma/enums";
 import { ActivityLogTimeline } from "@/components/ActivityLogTimeline";
 import { SignTbigDialog } from "./SignTbigDialog";
+import { TbigSignOtpDialog } from "./TbigSignOtpDialog";
 import { SendToVendorDialog } from "./SendToVendorDialog";
 import { RetryTbigSignButton } from "./RetryTbigSignButton";
 import { CheckStatusButton } from "@/components/CheckStatusButton";
+import { syncPengadaanJobStatus } from "@/lib/workflow/sync-status";
 
 export default async function DetailPengadaanPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole("TBIG");
+  const user = await requireRole("TBIG");
   const { id } = await params;
 
-  const pengadaan = await prisma.pengadaan.findUnique({
+  let pengadaan = await prisma.pengadaan.findUnique({
     where: { id },
     include: {
       vendor: true,
@@ -38,12 +40,85 @@ export default async function DetailPengadaanPage({
     notFound();
   }
 
-  const latestJob = pengadaan.jobs[0];
+  let latestJob = pengadaan.jobs[0];
+
+  // Sinkronkan status tanda tangan dengan provider jika masih ada pihak yang belum selesai
+  if (
+    (pengadaan.status === PengadaanStatus.MENUNGGU_TTD_VENDOR ||
+      pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG) &&
+    latestJob?.status === SignJobStatus.WAITING_SIGNER &&
+    (!pengadaan.vendorSignedAt || !pengadaan.tbigSignedAt) &&
+    latestJob?.externalId
+  ) {
+    try {
+      const syncResult = await syncPengadaanJobStatus(pengadaan.id);
+      if (syncResult.updated) {
+        const refreshed = await prisma.pengadaan.findUnique({
+          where: { id },
+          include: {
+            vendor: true,
+            files: true,
+            jobs: {
+              orderBy: { createdAt: "desc" },
+            },
+            logs: {
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        });
+        if (refreshed) {
+          pengadaan = refreshed;
+          latestJob = pengadaan.jobs[0];
+        }
+      }
+    } catch {
+      // Abaikan jika sync background gagal
+    }
+  }
   const isJobFailed = latestJob?.status === SignJobStatus.FAILED;
+  const isWaitingSigner =
+    (pengadaan.status === PengadaanStatus.MENUNGGU_TTD_VENDOR ||
+      pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG) &&
+    latestJob?.status === SignJobStatus.WAITING_SIGNER;
+  const canTbigSign = isWaitingSigner && !pengadaan.tbigSignedAt;
+
+  // Pastikan tbigSignUrl terisi dari Mekari jika belum tercatat di DB
+  let tbigSignUrl = latestJob?.tbigSignUrl;
+  if (
+    !tbigSignUrl &&
+    latestJob?.provider === "mekari" &&
+    latestJob?.externalId &&
+    canTbigSign
+  ) {
+    try {
+      const { mekariRequest } = await import("@/lib/esign/mekari/client");
+      const doc = await mekariRequest<{ data?: { attributes?: { signing_link?: Array<{ recipient_email?: string; signing_link?: string }> } } }>("GET", `/documents/${latestJob.externalId}`);
+      const signingLinks = doc.data?.attributes?.signing_link || [];
+      const tbigEmail = (process.env.MEKARI_TBIG_SIGNER_EMAIL || "devtujuhsembilan@gmail.com").toLowerCase();
+      const found = signingLinks.find(
+        (l) => l.recipient_email?.toLowerCase() === tbigEmail
+      )?.signing_link;
+      if (found) {
+        tbigSignUrl = found;
+        try {
+          await prisma.signJob.update({
+            where: { id: latestJob.id },
+            data: { tbigSignUrl: found },
+          });
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const isProcessing =
     (pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG ||
       pengadaan.status === PengadaanStatus.MENUNGGU_TTD_VENDOR) &&
-    !isJobFailed;
+    !isJobFailed &&
+    !canTbigSign;
 
   // Pilih file dokumen dengan prioritas: FINAL > SIGNED_VENDOR > STAMPED_METERAI > SIGNED_TBIG > PREPARED > ORIGINAL
   const filePriority: FileKind[] = [
@@ -123,8 +198,14 @@ export default async function DetailPengadaanPage({
               </form>
             </>
           )}
-          {pengadaan.status === PengadaanStatus.MENUNGGU_TTD_TBIG && !isProcessing && !isJobFailed && (
-            <SignTbigDialog pengadaanId={pengadaan.id} />
+          {canTbigSign && (
+            <TbigSignOtpDialog
+              pengadaanId={pengadaan.id}
+              noSuratPesanan={pengadaan.noSuratPesanan}
+              namaPengadaan={pengadaan.namaPengadaan}
+              initialEmail={process.env.MEKARI_TBIG_SIGNER_EMAIL || user.email}
+              isMockMode={process.env.ESIGN_MODE === "mock"}
+            />
           )}
           {isJobFailed && (
             <RetryTbigSignButton pengadaanId={pengadaan.id} />
@@ -153,6 +234,124 @@ export default async function DetailPengadaanPage({
           <div>
             <p className="text-sm font-bold text-amber-900">Menunggu Review Vendor</p>
             <p className="text-xs text-amber-700 mt-0.5">Dokumen pengadaan sedang ditinjau oleh pihak Vendor/Mitra untuk disetujui atau ditolak.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner Menunggu Tanda Tangan TBIG In-App */}
+      {canTbigSign && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+          <div className="flex items-start space-x-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0 mt-0.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-emerald-950">
+                Dokumen Siap Ditandatangani TBIG (Pihak Pertama)
+              </p>
+              <p className="text-xs text-emerald-800 mt-0.5">
+                {pengadaan.vendorSignedAt
+                  ? "Pihak Vendor telah menandatangani dokumen. Silakan lakukan verifikasi OTP untuk menyelesaikan penandatanganan pihak TBIG."
+                  : "Dokumen telah disetujui Vendor. Silakan lakukan verifikasi kode OTP in-app untuk menandatangani dokumen ini sebagai TBIG."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {latestJob && (
+              <CheckStatusButton
+                pengadaanId={pengadaan.id}
+                jobCreatedAt={latestJob.createdAt}
+                forceShow={true}
+                label="Cek status"
+              />
+            )}
+            {tbigSignUrl ? (
+              <a
+                href={tbigSignUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs shrink-0 flex items-center space-x-1.5"
+              >
+                <span>Lanjutkan Tanda Tangan TBIG</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M14 5l7 7m0 0l-7 7m7-7H3"
+                  />
+                </svg>
+              </a>
+            ) : (
+              <TbigSignOtpDialog
+                pengadaanId={pengadaan.id}
+                noSuratPesanan={pengadaan.noSuratPesanan}
+                namaPengadaan={pengadaan.namaPengadaan}
+                initialEmail={process.env.MEKARI_TBIG_SIGNER_EMAIL || user.email}
+                isMockMode={process.env.ESIGN_MODE === "mock"}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Banner TBIG Telah Sign, Menunggu Vendor */}
+      {isWaitingSigner && pengadaan.tbigSignedAt && !pengadaan.vendorSignedAt && (
+        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+          <div className="flex items-start space-x-3">
+            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 shrink-0 mt-0.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-blue-950">
+                TBIG Telah Menandatangani Dokumen
+              </p>
+              <p className="text-xs text-blue-800 mt-0.5">
+                Anda telah memvalidasi OTP dan menandatangani dokumen ini. Dokumen saat ini sedang menunggu tanda tangan dan pembubuhan eMeterai dari pihak Vendor.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {latestJob && (
+              <CheckStatusButton
+                pengadaanId={pengadaan.id}
+                jobCreatedAt={latestJob.createdAt}
+                forceShow={true}
+                label="Cek status"
+              />
+            )}
           </div>
         </div>
       )}

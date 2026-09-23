@@ -39,13 +39,15 @@ export interface RequestSignInput {
 export interface SubmitResult {
   externalId: string;
   signUrl?: string; // hanya requestSign, jika provider menyediakan
-  signerId?: string; // signer_id untuk Mekari V2 OTP sign & validate
+  tbigSignUrl?: string; // signing URL untuk TBIG (Mekari)
+  signerId?: string; // signer_id untuk Mekari V2 OTP sign & validate (Vendor)
+  tbigSignerId?: string; // signer_id untuk Mekari V2 OTP sign & validate (TBIG)
 }
 
 export type ESignEvent = {
   provider: "mock" | "mekari";
   externalId: string;
-  type: "COMPLETED" | "FAILED";
+  type: "COMPLETED" | "FAILED" | "IN_PROGRESS";
   errorMessage?: string;
   raw: unknown;
 };

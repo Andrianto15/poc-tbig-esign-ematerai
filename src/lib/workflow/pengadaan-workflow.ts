@@ -576,7 +576,9 @@ export async function submitVendorApproval(input: SubmitVendorApprovalInput) {
       provider: provider.name,
       externalId: result.externalId,
       signerId: result.signerId,
+      tbigSignerId: result.tbigSignerId,
       signUrl: result.signUrl,
+      tbigSignUrl: result.tbigSignUrl,
       inputFileKind: FileKind.PREPARED,
       outputFileKind: FileKind.FINAL,
     },
@@ -799,29 +801,38 @@ export async function completeVendorSignTransition(
     throw new Error(`SignJob '${jobId}' tidak ditemukan.`);
   }
 
-  if (job.status === SignJobStatus.COMPLETED) {
+  if (
+    job.status === SignJobStatus.COMPLETED &&
+    job.pengadaan.status === PengadaanStatus.SELESAI
+  ) {
     return job;
   }
 
   const now = new Date();
 
   // Optimistic update status pengadaan langsung ke SELESAI
+  // Mendukung status MENUNGGU_TTD_VENDOR (autosign true) dan MENUNGGU_TTD_TBIG (autosign false)
   const updated = await prisma.pengadaan.updateMany({
     where: {
       id: job.pengadaanId,
-      status: PengadaanStatus.MENUNGGU_TTD_VENDOR,
+      status: {
+        in: [
+          PengadaanStatus.MENUNGGU_TTD_VENDOR,
+          PengadaanStatus.MENUNGGU_TTD_TBIG,
+        ],
+      },
     },
     data: {
       status: PengadaanStatus.SELESAI,
-      vendorSignedAt: now,
-      tbigSignedAt: now,
-      meteraiStampedAt: now,
+      vendorSignedAt: job.pengadaan.vendorSignedAt || now,
+      tbigSignedAt: job.pengadaan.tbigSignedAt || now,
+      meteraiStampedAt: job.pengadaan.meteraiStampedAt || now,
     },
   });
 
-  if (updated.count === 0) {
+  if (updated.count === 0 && job.pengadaan.status !== PengadaanStatus.SELESAI) {
     console.warn(
-      `[completeVendorSignTransition] Status pengadaan '${job.pengadaanId}' bukan MENUNGGU_TTD_VENDOR.`
+      `[completeVendorSignTransition] Status pengadaan '${job.pengadaanId}' bukan MENUNGGU_TTD_VENDOR atau MENUNGGU_TTD_TBIG.`
     );
   }
 
@@ -883,7 +894,7 @@ export async function completeVendorSignTransition(
       pengadaanId: job.pengadaanId,
       actorId: null,
       action: "VENDOR_SIGNED",
-      note: "Dokumen pengadaan selesai ditandatangani oleh Vendor dan TBIG (Auto Sign). eMeterai resmi berhasil dibubuhkan (kuota dibebankan ke akun Vendor). Alur pengadaan selesai.",
+      note: "Dokumen pengadaan selesai ditandatangani oleh Vendor dan TBIG. eMeterai resmi berhasil dibubuhkan (kuota dibebankan ke akun Vendor). Alur pengadaan selesai.",
     },
   });
 

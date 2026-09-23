@@ -33,9 +33,15 @@ export async function GET(
       return new NextResponse("File tidak ditemukan", { status: 404 });
     }
 
-    // Vendor cannot view DRAFT or MENUNGGU_TTD_TBIG documents
-    const hiddenStatuses = ["DRAFT", "MENUNGGU_TTD_TBIG"];
-    if (hiddenStatuses.includes(documentFile.pengadaan.status)) {
+    // Vendor cannot view DRAFT documents, or MENUNGGU_TTD_TBIG before vendor is involved
+    if (documentFile.pengadaan.status === "DRAFT") {
+      return new NextResponse("File tidak ditemukan", { status: 404 });
+    }
+    if (
+      documentFile.pengadaan.status === "MENUNGGU_TTD_TBIG" &&
+      !documentFile.pengadaan.vendorRespondedAt &&
+      !documentFile.pengadaan.vendorSignedAt
+    ) {
       return new NextResponse("File tidak ditemukan", { status: 404 });
     }
   }

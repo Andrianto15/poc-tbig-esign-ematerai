@@ -140,7 +140,12 @@ export class MockESignProvider implements ESignProvider {
     const signUrl = `${baseUrl}/mock-mekari/sign/${input.jobId}`;
 
     // PRD Bagian 9: Tidak ada event sampai signer menandatangani di halaman mock
-    return { externalId, signUrl };
+    return {
+      externalId,
+      signUrl,
+      signerId: `mock-vendor-${input.jobId}`,
+      tbigSignerId: `mock-tbig-${input.jobId}`,
+    };
   }
 
   async downloadDocument(externalId: string): Promise<Uint8Array> {

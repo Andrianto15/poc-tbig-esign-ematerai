@@ -8,4 +8,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-Ketika membuat UI selalu gunakan skill `antislop` dan `antislop-ui`
+- Ketika membuat UI selalu gunakan skill `antislop` dan `antislop-ui`
+- Selalu baca dari `.codegraph` untuk scanning seluruh project

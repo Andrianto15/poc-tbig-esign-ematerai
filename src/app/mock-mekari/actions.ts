@@ -62,7 +62,53 @@ export async function submitMockSignAction(
     };
   }
 
-  // 1. Gambar tanda tangan simulasi TBIG, meterai, dan vendor pada PDF (Arsitektur 2 Multi-Signer)
+  const now = new Date();
+  const updatedPengadaan = await prisma.pengadaan.update({
+    where: { id: job.pengadaanId },
+    data: { vendorSignedAt: now },
+  });
+
+  await prisma.activityLog.create({
+    data: {
+      pengadaanId: job.pengadaanId,
+      actorId: null,
+      action: "VENDOR_SIGNED_OTP",
+      note: "Vendor telah menandatangani dokumen dan memvalidasi OTP secara in-app.",
+    },
+  });
+
+  // Jika TBIG juga sudah tanda tangan, finalisasi dokumen mock
+  if (updatedPengadaan.tbigSignedAt) {
+    await finalizeMockMultiSign(job.id);
+  }
+
+  try {
+    revalidatePath(`/vendor/pengadaan/${job.pengadaanId}`);
+    revalidatePath("/vendor/pengadaan");
+    revalidatePath(`/tbig/pengadaan/${job.pengadaanId}`);
+    revalidatePath("/tbig/pengadaan");
+  } catch {
+    // Abaikan jika dipanggil dari luar runtime Next.js (mis. standalone script)
+  }
+
+  return {
+    returnUrl: `/vendor/pengadaan/${job.pengadaanId}`,
+  };
+}
+
+export async function finalizeMockMultiSign(jobId: string) {
+  const job = await prisma.signJob.findUnique({
+    where: { id: jobId },
+    include: { pengadaan: true },
+  });
+
+  if (!job || !job.externalId) return;
+
+  const storage = getStorage();
+  const mockStorageKey = buildMockStorageKey(job.externalId);
+  const pdfBytes = await storage.get(mockStorageKey);
+  if (!pdfBytes) return;
+
   const doc = await PDFDocument.load(pdfBytes);
   const targetPage = doc.getPageCount();
   const vendorName = job.pengadaan.picNama || "PIC Vendor";
@@ -87,27 +133,67 @@ export async function submitMockSignAction(
     vendorName
   );
 
-  // 2. Simpan kembali PDF bertanda tangan di mock storage dengan key externalId
   await storage.put(mockStorageKey, signedPdfBytes, "application/pdf");
 
-  // 3. Evaluasi simulasi kegagalan
   const shouldFail = process.env.MOCK_ESIGN_FAIL === "SIGN_VENDOR";
 
-  // 4. Proses event ke workflow
   await handleESignEvent({
     provider: "mock",
     externalId: job.externalId,
     type: shouldFail ? "FAILED" : "COMPLETED",
     errorMessage: shouldFail
-      ? "Simulasi kegagalan tanda tangan vendor (MOCK_ESIGN_FAIL aktif)"
+      ? "Simulasi kegagalan tanda tangan (MOCK_ESIGN_FAIL aktif)"
       : undefined,
     raw: {
       simulated: true,
       jobId: job.id,
-      otp: "123456",
       timestamp: new Date().toISOString(),
     },
   });
+}
+
+export async function submitMockTbigSignAction(
+  jobId: string,
+  otp: string
+): Promise<{ error?: string }> {
+  if (process.env.ESIGN_MODE !== "mock") {
+    return { error: "Mock Mekari Sign hanya aktif pada mode ESIGN_MODE=mock." };
+  }
+
+  if (otp.trim() !== "123456") {
+    return {
+      error: "Kode OTP tidak valid. Gunakan 123456 untuk simulasi Mekari Sign.",
+    };
+  }
+
+  const job = await prisma.signJob.findUnique({
+    where: { id: jobId },
+    include: { pengadaan: true },
+  });
+
+  if (!job || !job.externalId) {
+    return { error: "Job penandatanganan tidak ditemukan atau belum valid." };
+  }
+
+  const now = new Date();
+  const updatedPengadaan = await prisma.pengadaan.update({
+    where: { id: job.pengadaanId },
+    data: { tbigSignedAt: now },
+  });
+
+  await prisma.activityLog.create({
+    data: {
+      pengadaanId: job.pengadaanId,
+      actorId: null,
+      action: "TBIG_SIGNED_OTP",
+      note: "TBIG telah menandatangani dokumen dan memvalidasi OTP secara in-app.",
+    },
+  });
+
+  // Jika Vendor juga sudah tanda tangan, finalisasi dokumen mock
+  if (updatedPengadaan.vendorSignedAt) {
+    await finalizeMockMultiSign(job.id);
+  }
 
   try {
     revalidatePath(`/vendor/pengadaan/${job.pengadaanId}`);
@@ -115,10 +201,8 @@ export async function submitMockSignAction(
     revalidatePath(`/tbig/pengadaan/${job.pengadaanId}`);
     revalidatePath("/tbig/pengadaan");
   } catch {
-    // Abaikan jika dipanggil dari luar runtime Next.js (mis. standalone script)
+    // Abaikan jika di luar runtime Next.js
   }
 
-  return {
-    returnUrl: `/vendor/pengadaan/${job.pengadaanId}`,
-  };
+  return {};
 }
